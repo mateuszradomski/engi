@@ -52,6 +52,7 @@ typedef struct VulkanInstance
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSet;
+    VkQueryPool queryPool;
     VulkanPipelineDefinition pipelineDefinition;
     VulkanCommandBufferAndPool commandBufferAndPool;
 } VulkanInstance;
@@ -65,6 +66,17 @@ typedef struct VulkanInstance
         assert(res == VK_SUCCESS);																		\
     }																									\
 }
+
+#ifdef _WIN32
+#include <Windows.h>
+double getWallTime()
+{
+    LARGE_INTEGER time,freq;
+    if (!QueryPerformanceFrequency(&freq)){ assert(false && "QueryPerformanceFrequency() error"); }
+    if (!QueryPerformanceCounter(&time)){ assert(false && "QueryPerformanceCounter() error"); }
+    return (double)time.QuadPart / freq.QuadPart;
+}
+#endif
 
 static uint8_t *
 readEntireFile(uint32_t *fileLength, const char *fileName)
@@ -357,6 +369,21 @@ createDescriptorSet(VkDevice device,
     return descriptorSet;
 }
 
+static VkQueryPool
+createQueryPool(VkDevice device)
+{
+    VkQueryPoolCreateInfo queryPoolCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+        .pNext = NULL,
+        .queryType = VK_QUERY_TYPE_TIMESTAMP,
+        .queryCount = 2
+    };
+
+    VkQueryPool queryPool = { 0 };
+    VK_ASSERT_RESULT(vkCreateQueryPool(device, &queryPoolCreateInfo, NULL, &queryPool));
+    return queryPool;
+}
+
 static VulkanPipelineDefinition
 createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout)
 {
@@ -401,7 +428,8 @@ createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout
 static VulkanCommandBufferAndPool
 createCommandBuffer(VulkanDeviceAndComputeQueue deviceAndQueue,
                     VkDescriptorSet descriptorSet,
-                    VulkanPipelineDefinition pipeline)
+                    VulkanPipelineDefinition pipeline,
+                    VkQueryPool queryPool)
 {
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffer;
@@ -424,6 +452,16 @@ createCommandBuffer(VulkanDeviceAndComputeQueue deviceAndQueue,
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     VK_ASSERT_RESULT(vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
+    VkCommandBufferBeginInfo commandBufferInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = NULL,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pInheritanceInfo = NULL,
+    };
+
+    vkCmdResetQueryPool(commandBuffer, queryPool, 0, 1);
+    vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
+
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipelineLayout, 0, 1, &descriptorSet, 0, NULL);
 
@@ -431,6 +469,8 @@ createCommandBuffer(VulkanDeviceAndComputeQueue deviceAndQueue,
                   MATRIX_SIZE / WORKGROUP_SIZE, // how many workgroups to dispatch in X
                   MATRIX_SIZE / WORKGROUP_SIZE, // how many workgroups to dispatch in Y
                   1);
+
+    vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
 
     VK_ASSERT_RESULT(vkEndCommandBuffer(commandBuffer));
 
@@ -458,8 +498,9 @@ initalizeVulkan()
     VkDescriptorPool descriptorPool = createDescriptorPool(deviceAndQueue.device);
     VkDescriptorSet descriptorSet = createDescriptorSet(deviceAndQueue.device, descriptorSetLayout, descriptorPool,
                                                         matrixABufferAndMemory, matrixBBufferAndMemory, matrixCBufferAndMemory);
+    VkQueryPool queryPool = createQueryPool(deviceAndQueue.device);
     VulkanPipelineDefinition pipelineDefinition = createComputePipeline(deviceAndQueue.device, descriptorSetLayout);
-    VulkanCommandBufferAndPool commandBufferAndPool = createCommandBuffer(deviceAndQueue, descriptorSet, pipelineDefinition);
+    VulkanCommandBufferAndPool commandBufferAndPool = createCommandBuffer(deviceAndQueue, descriptorSet, pipelineDefinition, queryPool);
 
     result.instance = instance;
     result.phyDevice = phyDevice;
@@ -471,6 +512,7 @@ initalizeVulkan()
     result.descriptorSetLayout = descriptorSetLayout;
     result.descriptorPool = descriptorPool;
     result.descriptorSet = descriptorSet;
+    result.queryPool = queryPool;
     result.pipelineDefinition = pipelineDefinition;
     result.commandBufferAndPool = commandBufferAndPool;
 
@@ -480,21 +522,48 @@ initalizeVulkan()
 static void
 runCommandBuffer(VulkanInstance instance)
 {
-    VkSubmitInfo submitInfo = { 0 };
+    VkSubmitInfo submitInfo = {0};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &instance.commandBufferAndPool.commandBuffer;
 
     VkFence fence;
-    VkFenceCreateInfo fenceCreateInfo = { 0 };
+    VkFenceCreateInfo fenceCreateInfo = {0};
     fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceCreateInfo.flags = 0;
 
-    VK_ASSERT_RESULT(vkCreateFence(instance.deviceAndQueue.device, &fenceCreateInfo, NULL, &fence));
-    VK_ASSERT_RESULT(vkQueueSubmit(instance.deviceAndQueue.computeQueue, 1, &submitInfo, fence));
-    VK_ASSERT_RESULT(vkWaitForFences(instance.deviceAndQueue.device, 1, &fence, VK_TRUE, 100000000000));
+    {
+        VK_ASSERT_RESULT(vkCreateFence(instance.deviceAndQueue.device, &fenceCreateInfo, NULL, &fence));
+        double start = getWallTime();
+        VK_ASSERT_RESULT(vkQueueSubmit(instance.deviceAndQueue.computeQueue, 1, &submitInfo, fence));
+        VK_ASSERT_RESULT(vkWaitForFences(instance.deviceAndQueue.device, 1, &fence, VK_TRUE, 100000000000));
+        double end = getWallTime();
+        double execTime = end - start;
+        double gflops = ((2 * pow(MATRIX_SIZE, 3)) / execTime) / 1e9;
+        printf("It took %fs [%f GFLOPS]\n", execTime, gflops);
 
-    vkDestroyFence(instance.deviceAndQueue.device, fence, NULL);
+        uint64_t ts[2];
+        VK_ASSERT_RESULT(vkGetQueryPoolResults(instance.deviceAndQueue.device, instance.queryPool,
+                                               0, 2, sizeof(uint64_t) * 2, ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
+
+        double msTime = (ts[1] - ts[0]);
+        printf("Vulkan execution time = %.2f nanoseconds, %.2f ms\n", msTime, msTime / 1000000);
+
+        vkDestroyFence(instance.deviceAndQueue.device, fence, NULL);
+    }
+
+    {
+        VK_ASSERT_RESULT(vkCreateFence(instance.deviceAndQueue.device, &fenceCreateInfo, NULL, &fence));
+        double start = getWallTime();
+        VK_ASSERT_RESULT(vkQueueSubmit(instance.deviceAndQueue.computeQueue, 1, &submitInfo, fence));
+        VK_ASSERT_RESULT(vkWaitForFences(instance.deviceAndQueue.device, 1, &fence, VK_TRUE, 100000000000));
+        double end = getWallTime();
+        double execTime = end - start;
+        double gflops = ((2 * pow(MATRIX_SIZE, 3)) / execTime) / 1e9;
+        printf("It took %fs [%f GFLOPS]\n", execTime, gflops);
+
+        vkDestroyFence(instance.deviceAndQueue.device, fence, NULL);
+    }
 }
 
 int main()
@@ -540,12 +609,7 @@ int main()
         vkUnmapMemory(instance.deviceAndQueue.device, instance.matrixBBufferAndMemory.bufferMemory);
     }
 
-    clock_t start = clock();
     runCommandBuffer(instance);
-    clock_t end = clock();
-    float execTime = (float)(end - start)/CLOCKS_PER_SEC;
-    float gflops = ((2*pow(MATRIX_SIZE, 3)) / execTime) / 1e9;
-    printf("It took %fs [%f GFLOPS]\n", execTime, gflops);
 
     {
         void *mappedMemory = NULL;
