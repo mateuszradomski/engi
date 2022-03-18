@@ -5,8 +5,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
-#define MATRIX_SIZE 64
+#define MATRIX_SIZE 1024
 #define WORKGROUP_SIZE 32
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
@@ -283,7 +284,7 @@ createDescriptorPool(VkDevice device)
 {
     VkDescriptorPoolSize descriptorPoolSize = { 0 };
     descriptorPoolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorPoolSize.descriptorCount = 1;
+    descriptorPoolSize.descriptorCount = 3;
 
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = { 0 };
     descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -538,7 +539,10 @@ int main()
         vkUnmapMemory(instance.deviceAndQueue.device, instance.matrixBBufferAndMemory.bufferMemory);
     }
 
+    clock_t start = clock();
     runCommandBuffer(instance);
+    clock_t end = clock();
+    printf("It took %fs\n", (float)(end - start)/CLOCKS_PER_SEC);
 
     {
         void *mappedMemory = NULL;
