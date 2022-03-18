@@ -1,0 +1,60 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+#define MATRIX_SIZE 4096
+#define WORKGROUP_SIZE 32
+#define TS WORKGROUP_SIZE
+layout (local_size_x = WORKGROUP_SIZE, local_size_y = WORKGROUP_SIZE, local_size_z = 1 ) in;
+
+layout(set = 0, binding = 0) buffer bufA
+{
+   float matrixA[];
+};
+
+layout(set = 0, binding = 1) buffer bufB
+{
+   float matrixB[];
+};
+
+layout(set = 0, binding = 2) buffer bufC
+{
+   float matrixC[];
+};
+
+shared float ATile[TS][TS];
+shared float BTile[TS][TS];
+
+void main()
+{
+   const uint globalRow = gl_GlobalInvocationID.x;
+   const uint globalCol = gl_GlobalInvocationID.y;
+   const uint localRow = gl_LocalInvocationID.x;
+   const uint localCol = gl_LocalInvocationID.y;
+
+   float sum = 0.0;
+
+   const int numTiles = MATRIX_SIZE / TS;
+
+   for(uint tileIndex = 0; tileIndex < numTiles; tileIndex++)
+   {
+      // Each worker in the thread group will load the value it's responsible for
+      const uint tiledRow = TS * tileIndex + globalRow;
+      const uint tiledCol = TS * tileIndex + globalCol;
+      ATile[globalRow][globalCol] = matrixA[tiledRow * MATRIX_SIZE + globalCol];
+      BTile[globalRow][globalCol] = matrixB[globalRow * MATRIX_SIZE + tiledCol];
+
+      // Wait for all workers to finish sync
+      barrier();
+
+      for(int k = 0; k < TS; k++)
+      {
+         sum += ATile[k][globalCol] * ATile[globalRow][k];
+      }
+
+      // Wait for all workers to finish before writing the result back in
+      barrier();
+   }
+
+   uint index = MATRIX_SIZE * globalRow + globalCol;
+   matrixC[index] = sum;
+}

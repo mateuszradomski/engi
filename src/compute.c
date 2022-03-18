@@ -5,9 +5,10 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <time.h>
 
-#define MATRIX_SIZE 1024
+#define MATRIX_SIZE 4096
 #define WORKGROUP_SIZE 32
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
@@ -127,7 +128,7 @@ findPhysicalDevice(VkInstance instance)
     VkResult ss = vkEnumeratePhysicalDevices(instance, &deviceCount, devicesArray);
     
     // TODO(radomski): Choose the most powerfull GPU
-    VkPhysicalDevice result = devicesArray[0];
+    VkPhysicalDevice result = devicesArray[1];
     free(devicesArray);
     return result;
 }
@@ -360,7 +361,7 @@ static VulkanPipelineDefinition
 createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout)
 {
     uint32_t filelength;
-    uint8_t *spirvBinary = readEntireFile(&filelength, "shaders/comp.spv");
+    uint8_t *spirvBinary = readEntireFile(&filelength, "shaders/shader_faster.spirv");
     VkShaderModuleCreateInfo createInfo = { 0 };
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     createInfo.pCode = (uint32_t *)spirvBinary;
@@ -542,7 +543,9 @@ int main()
     clock_t start = clock();
     runCommandBuffer(instance);
     clock_t end = clock();
-    printf("It took %fs\n", (float)(end - start)/CLOCKS_PER_SEC);
+    float execTime = (float)(end - start)/CLOCKS_PER_SEC;
+    float gflops = ((2*pow(MATRIX_SIZE, 3)) / execTime) / 1e9;
+    printf("It took %fs [%f GFLOPS]\n", execTime, gflops);
 
     {
         void *mappedMemory = NULL;
