@@ -5,14 +5,32 @@
 #define WORKGROUP_SIZE 32
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = WORKGROUP_SIZE, local_size_z = 1 ) in;
 
-layout(std140, binding = 0) buffer buf
+layout(set = 0, binding = 0) buffer bufA
 {
    float matrixA[];
 };
 
+layout(set = 0, binding = 1) buffer bufB
+{
+   float matrixB[];
+};
+
+layout(set = 0, binding = 2) buffer bufC
+{
+   float matrixC[];
+};
+
 void main()
 {
-  uint index = MATRIX_SIZE * gl_GlobalInvocationID.y + gl_GlobalInvocationID.x;
-  float PI = 3.1415926535;
-  matrixA[index] = exp(PI);
+  const uint row = gl_GlobalInvocationID.x;
+  const uint col = gl_GlobalInvocationID.y;
+  float sum = 0.0;
+
+  for(uint i = 0; i < MATRIX_SIZE; i++)
+  {
+    sum += matrixA[row * MATRIX_SIZE + i] * matrixB[i * MATRIX_SIZE + col];
+  }
+
+  uint index = MATRIX_SIZE * row + col;
+  matrixC[index] = sum;
 }

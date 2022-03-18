@@ -9,6 +9,8 @@
 #define MATRIX_SIZE 64
 #define WORKGROUP_SIZE 32
 
+#define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
+
 typedef struct VulkanDeviceAndComputeQueue
 {
     VkDevice device;
@@ -42,7 +44,9 @@ typedef struct VulkanInstance
     VulkanDeviceAndComputeQueue deviceAndQueue;
 
     uint32_t matrixASize;
-    VulkanBufferAndMemory bufferAndMemory;
+    VulkanBufferAndMemory matrixABufferAndMemory;
+    VulkanBufferAndMemory matrixBBufferAndMemory;
+    VulkanBufferAndMemory matrixCBufferAndMemory;
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSet;
@@ -247,16 +251,26 @@ createBuffer(VkPhysicalDevice phyDevice, VkDevice device, uint32_t bufferSize)
 static VkDescriptorSetLayout
 createDescriptorSetLayout(VkDevice device)
 {
-    VkDescriptorSetLayoutBinding descriptorSetLayoutBinding = { 0 };
-    descriptorSetLayoutBinding.binding = 0;
-    descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorSetLayoutBinding.descriptorCount = 1;
-    descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    VkDescriptorSetLayoutBinding descriptorSetLayoutBindingArray[3] = { 0 };
+    descriptorSetLayoutBindingArray[0].binding = 0;
+    descriptorSetLayoutBindingArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorSetLayoutBindingArray[0].descriptorCount = 1;
+    descriptorSetLayoutBindingArray[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    descriptorSetLayoutBindingArray[1].binding = 1;
+    descriptorSetLayoutBindingArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorSetLayoutBindingArray[1].descriptorCount = 1;
+    descriptorSetLayoutBindingArray[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    descriptorSetLayoutBindingArray[2].binding = 2;
+    descriptorSetLayoutBindingArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorSetLayoutBindingArray[2].descriptorCount = 1;
+    descriptorSetLayoutBindingArray[2].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = { 0 };
     descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutCreateInfo.bindingCount = 1;
-    descriptorSetLayoutCreateInfo.pBindings = &descriptorSetLayoutBinding;
+    descriptorSetLayoutCreateInfo.bindingCount = ARRAY_LEN(descriptorSetLayoutBindingArray);
+    descriptorSetLayoutCreateInfo.pBindings = descriptorSetLayoutBindingArray;
 
     VkDescriptorSetLayout descriptorSetLayout;
     VK_ASSERT_RESULT(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, NULL, &descriptorSetLayout));
@@ -284,9 +298,12 @@ createDescriptorPool(VkDevice device)
 }
 
 static VkDescriptorSet
-createDescriptorSet(VkDevice device, VulkanBufferAndMemory buffer,
+createDescriptorSet(VkDevice device,
                     VkDescriptorSetLayout descriptorSetLayout,
-                    VkDescriptorPool descriptorPool)
+                    VkDescriptorPool descriptorPool,
+                    VulkanBufferAndMemory matrixABuffer,
+                    VulkanBufferAndMemory matrixBBuffer,
+                    VulkanBufferAndMemory matrixCBuffer)
 {
     VkDescriptorSet descriptorSet;
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = { 0 };
@@ -298,20 +315,42 @@ createDescriptorSet(VkDevice device, VulkanBufferAndMemory buffer,
     VK_ASSERT_RESULT(vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, &descriptorSet));
 
     // Bind buffer with descriptor set
-    VkDescriptorBufferInfo descriptorBufferInfo = { 0 };
-    descriptorBufferInfo.buffer = buffer.buffer;
-    descriptorBufferInfo.offset = 0;
-    descriptorBufferInfo.range = buffer.bufferSize;
+    VkDescriptorBufferInfo descriptorBufferInfoArray[3] = { 0 };
+    descriptorBufferInfoArray[0].buffer = matrixABuffer.buffer;
+    descriptorBufferInfoArray[0].offset = 0;
+    descriptorBufferInfoArray[0].range = matrixABuffer.bufferSize;
 
-    VkWriteDescriptorSet writeDescriptorSet = { 0 };
-    writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSet.dstSet = descriptorSet;
-    writeDescriptorSet.dstBinding = 0;
-    writeDescriptorSet.descriptorCount = 1;
-    writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSet.pBufferInfo = &descriptorBufferInfo;
+    descriptorBufferInfoArray[1].buffer = matrixBBuffer.buffer;
+    descriptorBufferInfoArray[1].offset = 0;
+    descriptorBufferInfoArray[1].range = matrixBBuffer.bufferSize;
 
-    vkUpdateDescriptorSets(device, 1, &writeDescriptorSet, 0, NULL);
+    descriptorBufferInfoArray[2].buffer = matrixCBuffer.buffer;
+    descriptorBufferInfoArray[2].offset = 0;
+    descriptorBufferInfoArray[2].range = matrixCBuffer.bufferSize;
+
+    VkWriteDescriptorSet writeDescriptorSetsArray[3] = { 0 };
+    writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[0].dstSet = descriptorSet;
+    writeDescriptorSetsArray[0].dstBinding = 0;
+    writeDescriptorSetsArray[0].descriptorCount = 1;
+    writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
+
+    writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[1].dstSet = descriptorSet;
+    writeDescriptorSetsArray[1].dstBinding = 1;
+    writeDescriptorSetsArray[1].descriptorCount = 1;
+    writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
+
+    writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[2].dstSet = descriptorSet;
+    writeDescriptorSetsArray[2].dstBinding = 2;
+    writeDescriptorSetsArray[2].descriptorCount = 1;
+    writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[2].pBufferInfo = &descriptorBufferInfoArray[2];
+
+    vkUpdateDescriptorSets(device, ARRAY_LEN(writeDescriptorSetsArray), writeDescriptorSetsArray, 0, NULL);
 
     return descriptorSet;
 }
@@ -408,10 +447,15 @@ initalizeVulkan()
     VulkanDeviceAndComputeQueue deviceAndQueue = createDevice(phyDevice);
 
     uint32_t matrixASize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
-    VulkanBufferAndMemory bufferAndMemory = createBuffer(phyDevice, deviceAndQueue.device, matrixASize);
+    uint32_t matrixBSize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
+    uint32_t matrixCSize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
+    VulkanBufferAndMemory matrixABufferAndMemory = createBuffer(phyDevice, deviceAndQueue.device, matrixASize);
+    VulkanBufferAndMemory matrixBBufferAndMemory = createBuffer(phyDevice, deviceAndQueue.device, matrixBSize);
+    VulkanBufferAndMemory matrixCBufferAndMemory = createBuffer(phyDevice, deviceAndQueue.device, matrixCSize);
     VkDescriptorSetLayout descriptorSetLayout = createDescriptorSetLayout(deviceAndQueue.device);
     VkDescriptorPool descriptorPool = createDescriptorPool(deviceAndQueue.device);
-    VkDescriptorSet descriptorSet = createDescriptorSet(deviceAndQueue.device, bufferAndMemory, descriptorSetLayout, descriptorPool);
+    VkDescriptorSet descriptorSet = createDescriptorSet(deviceAndQueue.device, descriptorSetLayout, descriptorPool,
+                                                        matrixABufferAndMemory, matrixBBufferAndMemory, matrixCBufferAndMemory);
     VulkanPipelineDefinition pipelineDefinition = createComputePipeline(deviceAndQueue.device, descriptorSetLayout);
     VulkanCommandBufferAndPool commandBufferAndPool = createCommandBuffer(deviceAndQueue, descriptorSet, pipelineDefinition);
 
@@ -419,7 +463,9 @@ initalizeVulkan()
     result.phyDevice = phyDevice;
     result.deviceAndQueue = deviceAndQueue;
     result.matrixASize = matrixASize;
-    result.bufferAndMemory = bufferAndMemory;
+    result.matrixABufferAndMemory = matrixABufferAndMemory;
+    result.matrixBBufferAndMemory = matrixBBufferAndMemory;
+    result.matrixCBufferAndMemory = matrixCBufferAndMemory;
     result.descriptorSetLayout = descriptorSetLayout;
     result.descriptorPool = descriptorPool;
     result.descriptorSet = descriptorSet;
@@ -452,17 +498,58 @@ runCommandBuffer(VulkanInstance instance)
 int main()
 {
     VulkanInstance instance = initalizeVulkan();
+
+    // Verify working sgemm
+    {
+        void *mappedMemory = NULL;
+        vkMapMemory(instance.deviceAndQueue.device,
+                    instance.matrixABufferAndMemory.bufferMemory, 0,
+                    instance.matrixABufferAndMemory.bufferSize, 0,
+                    &mappedMemory);
+        float *floatMappedMemory = mappedMemory;
+
+        for (int row = 0; row < MATRIX_SIZE; row++)
+        {
+            for (int col = 0; col < MATRIX_SIZE; col++)
+            {
+                floatMappedMemory[row * MATRIX_SIZE + col] = 2.0;
+            }
+        }
+
+        vkUnmapMemory(instance.deviceAndQueue.device, instance.matrixABufferAndMemory.bufferMemory);
+    }
+
+    {
+        void *mappedMemory = NULL;
+        vkMapMemory(instance.deviceAndQueue.device,
+                    instance.matrixBBufferAndMemory.bufferMemory, 0,
+                    instance.matrixBBufferAndMemory.bufferSize, 0,
+                    &mappedMemory);
+        float *floatMappedMemory = mappedMemory;
+
+        for (int row = 0; row < MATRIX_SIZE; row++)
+        {
+            for (int col = 0; col < MATRIX_SIZE; col++)
+            {
+                floatMappedMemory[row * MATRIX_SIZE + col] = 2.0;
+            }
+        }
+
+        vkUnmapMemory(instance.deviceAndQueue.device, instance.matrixBBufferAndMemory.bufferMemory);
+    }
+
     runCommandBuffer(instance);
 
-    // Verify working matrix
-    void *mappedMemory = NULL;
-    vkMapMemory(instance.deviceAndQueue.device,
-                instance.bufferAndMemory.bufferMemory, 0,
-                instance.bufferAndMemory.bufferSize, 0,
-                &mappedMemory);
-    float *floatMappedMemory = mappedMemory;
+    {
+        void *mappedMemory = NULL;
+        vkMapMemory(instance.deviceAndQueue.device,
+                    instance.matrixCBufferAndMemory.bufferMemory, 0,
+                    instance.matrixCBufferAndMemory.bufferSize, 0,
+                    &mappedMemory);
+        float *floatMappedMemory = mappedMemory;
 
-    printf("floatMappedMemory = %f\n", floatMappedMemory[0]);
+        printf("floatMappedMemory = %f\n", floatMappedMemory[0]);
+    }
 
     return 0;
 }
