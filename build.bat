@@ -1,6 +1,6 @@
 pushd shaders
-glslangValidator.exe -V shader.comp -o shader.spirv
-glslangValidator.exe -V shader_faster.comp -o shader_faster.spirv
+glslc.exe -O shader.comp -o shader.spirv
+glslc.exe -O shader_faster.comp -o shader_faster.spirv
 popd
 
 @REM Build base file

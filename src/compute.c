@@ -573,33 +573,15 @@ runCommandBuffer(VKState instance)
     fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceCreateInfo.flags = 0;
 
+    for(int i = 0; i < 8; i++)
     {
         VK_CALL(vkCreateFence(instance.device, &fenceCreateInfo, NULL, &fence));
-        double start = getWallTime();
         VK_CALL(vkQueueSubmit(instance.computeQueue, 1, &submitInfo, fence));
         VK_CALL(vkWaitForFences(instance.device, 1, &fence, VK_TRUE, 100000000000));
-        double end = getWallTime();
-        double execTime = end - start;
-        double gflops = ((2 * pow(MATRIX_SIZE, 3)) / execTime) / 1e9;
-        printf("It took %fs [%f GFLOPS]\n", execTime, gflops);
-
         uint64_t ts[2];
         VK_CALL(vkGetQueryPoolResults(instance.device, instance.queryPool,
                                                0, 2, sizeof(uint64_t) * 2, ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
-
-        double msTime = (ts[1] - ts[0]);
-        printf("Vulkan execution time = %.2f nanoseconds, %.2f ms\n", msTime, msTime / 1000000);
-
-        vkDestroyFence(instance.device, fence, NULL);
-    }
-
-    {
-        VK_CALL(vkCreateFence(instance.device, &fenceCreateInfo, NULL, &fence));
-        double start = getWallTime();
-        VK_CALL(vkQueueSubmit(instance.computeQueue, 1, &submitInfo, fence));
-        VK_CALL(vkWaitForFences(instance.device, 1, &fence, VK_TRUE, 100000000000));
-        double end = getWallTime();
-        double execTime = end - start;
+        double execTime = (ts[1] - ts[0]) / 1e9;
         double gflops = ((2 * pow(MATRIX_SIZE, 3)) / execTime) / 1e9;
         printf("It took %fs [%f GFLOPS]\n", execTime, gflops);
 

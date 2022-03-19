@@ -34,7 +34,6 @@ void main()
    float sum = 0.0;
 
    const int numTiles = MATRIX_SIZE / TS;
-
    for(uint tileIndex = 0; tileIndex < numTiles; tileIndex++)
    {
       // Each worker in the thread group will load the value it's responsible for
@@ -55,6 +54,5 @@ void main()
       barrier();
    }
 
-   uint index = MATRIX_SIZE * globalRow + globalCol;
-   matrixC[index] = sum;
+   matrixC[MATRIX_SIZE * globalRow + globalCol] = sum;
 }
