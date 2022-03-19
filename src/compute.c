@@ -46,6 +46,10 @@ typedef struct VKState
     VKBufferAndMemory matrixABufferAndMemory;
     VKBufferAndMemory matrixBBufferAndMemory;
     VKBufferAndMemory matrixCBufferAndMemory;
+
+    VKBufferAndMemory matrixADevice;
+    VKBufferAndMemory matrixBDevice;
+    VKBufferAndMemory matrixCDevice;
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSet;
@@ -227,12 +231,12 @@ findMemoryType(VkPhysicalDevice phyDevice, uint32_t memoryTypeBits, VkMemoryProp
 }
 
 static VKBufferAndMemory
-createBuffer(VKState *state, uint32_t bufferSize)
+createBuffer(VKState *state, uint32_t bufferSize, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryFlags)
 {
     VkBufferCreateInfo bufferCreateInfo = { 0 };
     bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferCreateInfo.size = bufferSize;
-    bufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    bufferCreateInfo.usage = usageFlags;
     bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     VkBuffer buffer = { 0 };
@@ -245,10 +249,7 @@ createBuffer(VKState *state, uint32_t bufferSize)
     VkMemoryAllocateInfo allocateInfo = { 0 };
     allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocateInfo.allocationSize = memoryReqs.size;
-    allocateInfo.memoryTypeIndex = findMemoryType(
-        state->phyDevice,
-        memoryReqs.memoryTypeBits,
-        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    allocateInfo.memoryTypeIndex = findMemoryType(state->phyDevice, memoryReqs.memoryTypeBits, memoryFlags);
 
     VK_CALL(vkAllocateMemory(state->device, &allocateInfo, NULL, &bufferMemory)); // allocate memory on device.
     VK_CALL(vkBindBufferMemory(state->device, buffer, bufferMemory, 0));
@@ -311,13 +312,57 @@ createMatrixBuffers(VKState *state)
     uint32_t matrixASize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
     uint32_t matrixBSize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
     uint32_t matrixCSize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
-    VKBufferAndMemory matrixABufferAndMemory = createBuffer(state, matrixASize);
-    VKBufferAndMemory matrixBBufferAndMemory = createBuffer(state, matrixBSize);
-    VKBufferAndMemory matrixCBufferAndMemory = createBuffer(state, matrixCSize);
 
-    state->matrixABufferAndMemory = matrixABufferAndMemory;
-    state->matrixBBufferAndMemory = matrixBBufferAndMemory;
-    state->matrixCBufferAndMemory = matrixCBufferAndMemory;
+    VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    // Staging buffers
+    state->matrixABufferAndMemory = createBuffer(state, matrixASize, usageFlags, memoryFlags);
+    state->matrixBBufferAndMemory = createBuffer(state, matrixBSize, usageFlags, memoryFlags);
+    state->matrixCBufferAndMemory = createBuffer(state, matrixCSize, usageFlags, memoryFlags);
+
+    // On device memory buffers 
+    state->matrixADevice = createBuffer(state, matrixASize, usageFlags, deviceMemoryFlags);
+    state->matrixBDevice = createBuffer(state, matrixBSize, usageFlags, deviceMemoryFlags);
+    state->matrixCDevice = createBuffer(state, matrixCSize, usageFlags, deviceMemoryFlags);
+}
+
+static void
+copyStagingBufferToDevice(VKState *state, VKBufferAndMemory staging, VKBufferAndMemory device)
+{
+    assert(staging.bufferSize == device.bufferSize);
+    VkCommandBufferAllocateInfo allocInfo = { 0 };
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandPool = state->commandPool;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer cmdBuffer = { 0 };
+    vkAllocateCommandBuffers(state->device, &allocInfo, &cmdBuffer);
+
+    VkCommandBufferBeginInfo beginInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+
+    vkBeginCommandBuffer(cmdBuffer, &beginInfo);
+
+    VkBufferCopy copyRegion = { .size = staging.bufferSize };
+    vkCmdCopyBuffer(cmdBuffer, staging.buffer, device.buffer, 1, &copyRegion);
+
+    vkEndCommandBuffer(cmdBuffer);
+
+    VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmdBuffer,
+    };
+
+    vkQueueSubmit(state->computeQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(state->computeQueue);
+
+    vkFreeCommandBuffers(state->device, state->commandPool, 1, &cmdBuffer);
 }
 
 static VkDescriptorSetLayout
@@ -444,12 +489,6 @@ createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout
 static void
 createCommandBuffer(VKState *state)
 {
-    VkCommandPoolCreateInfo commandPoolCreateInfo = { 0 };
-    commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    commandPoolCreateInfo.flags = 0;
-    commandPoolCreateInfo.queueFamilyIndex = state->computeQueueFamilyIndex;
-    VK_CALL(vkCreateCommandPool(state->device, &commandPoolCreateInfo, NULL, &state->commandPool));
-
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = { 0 };
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     commandBufferAllocateInfo.commandPool = state->commandPool;
@@ -505,6 +544,12 @@ initalizeVulkan()
     result.descriptorSetLayout = descriptorSetLayout;
     result.descriptorPool = descriptorPool;
     result.descriptorSet = descriptorSet;
+
+    VkCommandPoolCreateInfo commandPoolCreateInfo = { 0 };
+    commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    commandPoolCreateInfo.flags = 0;
+    commandPoolCreateInfo.queueFamilyIndex = result.computeQueueFamilyIndex;
+    VK_CALL(vkCreateCommandPool(result.device, &commandPoolCreateInfo, NULL, &result.commandPool));
 
     VkQueryPool queryPool = createQueryPool(deviceAndQueue.device);
     VKPipelineDefinition pipelineDefinition = createComputePipeline(deviceAndQueue.device, descriptorSetLayout);
@@ -585,17 +630,17 @@ int main()
     VKState state = initalizeVulkan();
 
     createMatrixBuffers(&state);
-    bindDescriptorSetWithBuffers(&state,
-                                 state.matrixABufferAndMemory,
-                                 state.matrixBBufferAndMemory,
-                                 state.matrixCBufferAndMemory);
-
-    createCommandBuffer(&state);
-
 
     // Verify working sgemm
     fillMatrixWithData(&state, state.matrixABufferAndMemory);
     fillMatrixWithData(&state, state.matrixBBufferAndMemory);
+
+    copyStagingBufferToDevice(&state, state.matrixABufferAndMemory, state.matrixADevice);
+    copyStagingBufferToDevice(&state, state.matrixBBufferAndMemory, state.matrixBDevice);
+    copyStagingBufferToDevice(&state, state.matrixCBufferAndMemory, state.matrixCDevice);
+
+    bindDescriptorSetWithBuffers(&state, state.matrixADevice, state.matrixBDevice, state.matrixCDevice);
+    createCommandBuffer(&state);
 
     runCommandBuffer(state);
 
