@@ -13,56 +13,54 @@
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
-typedef struct VulkanDeviceAndComputeQueue
+typedef struct VKDeviceAndComputeQueue
 {
     VkDevice device;
     VkQueue computeQueue;
     uint32_t computeQueueFamilyIndex;
-} VulkanDeviceAndComputeQueue;
+} VKDeviceAndComputeQueue;
 
-typedef struct VulkanBufferAndMemory
+typedef struct VKBufferAndMemory
 {
     VkBuffer buffer;
     VkDeviceMemory bufferMemory;
     uint32_t bufferSize;
-} VulkanBufferAndMemory;
+} VKBufferAndMemory;
 
-typedef struct VulkanPipelineDefinition
+typedef struct VKPipelineDefinition
 {
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
-} VulkanPipelineDefinition;
+} VKPipelineDefinition;
 
-typedef struct VulkanCommandBufferAndPool
-{
-    VkCommandPool commandPool;
-    VkCommandBuffer commandBuffer;
-} VulkanCommandBufferAndPool;
-
-typedef struct VulkanInstance
+typedef struct VKState
 {
     VkInstance instance;
     VkPhysicalDevice phyDevice;
-    VulkanDeviceAndComputeQueue deviceAndQueue;
+
+    VkDevice device;
+    VkQueue computeQueue;
+    uint32_t computeQueueFamilyIndex;
 
     uint32_t matrixASize;
-    VulkanBufferAndMemory matrixABufferAndMemory;
-    VulkanBufferAndMemory matrixBBufferAndMemory;
-    VulkanBufferAndMemory matrixCBufferAndMemory;
+    VKBufferAndMemory matrixABufferAndMemory;
+    VKBufferAndMemory matrixBBufferAndMemory;
+    VKBufferAndMemory matrixCBufferAndMemory;
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSet;
     VkQueryPool queryPool;
-    VulkanPipelineDefinition pipelineDefinition;
-    VulkanCommandBufferAndPool commandBufferAndPool;
-} VulkanInstance;
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandPool commandPool;
+    VkCommandBuffer commandBuffer;
+} VKState;
 
-#define VK_ASSERT_RESULT(f) 																				\
+#define VK_CALL(f) 																				        \
 {																										\
     VkResult res = (f);																					\
     if (res != VK_SUCCESS)																				\
     {																									\
-        printf("Fatal : VkResult is %d in %s at line %d\n", res,  __FILE__, __LINE__); \
+        printf("Fatal : VkResult is %d in %s at line %d\n", res,  __FILE__, __LINE__);                  \
         assert(res == VK_SUCCESS);																		\
     }																									\
 }
@@ -121,7 +119,7 @@ createInstance()
     createInfo.ppEnabledExtensionNames = NULL;
 
     VkInstance instance;
-    VK_ASSERT_RESULT(vkCreateInstance(&createInfo, NULL, &instance));
+    VK_CALL(vkCreateInstance(&createInfo, NULL, &instance));
 
     return instance;
 }
@@ -174,7 +172,7 @@ getComputeQueueFamilyIndex(VkPhysicalDevice phyDevice)
     return queueFamilyIndex;
 }
 
-static VulkanDeviceAndComputeQueue
+static VKDeviceAndComputeQueue
 createDevice(VkPhysicalDevice phyDevice)
 {
     VkDeviceQueueCreateInfo queueCreateInfo = { 0 };
@@ -196,12 +194,12 @@ createDevice(VkPhysicalDevice phyDevice)
     deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
 
     VkDevice device = { 0 };
-    VK_ASSERT_RESULT(vkCreateDevice(phyDevice, &deviceCreateInfo, NULL, &device));
+    VK_CALL(vkCreateDevice(phyDevice, &deviceCreateInfo, NULL, &device));
 
     VkQueue queue;
     vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
 
-    VulkanDeviceAndComputeQueue result = { 0 };
+    VKDeviceAndComputeQueue result = { 0 };
     result.device = device;
     result.computeQueue = queue;
     result.computeQueueFamilyIndex = queueFamilyIndex;
@@ -228,8 +226,8 @@ findMemoryType(VkPhysicalDevice phyDevice, uint32_t memoryTypeBits, VkMemoryProp
     return 0; // Just to wave away the warning
 }
 
-static VulkanBufferAndMemory
-createBuffer(VkPhysicalDevice phyDevice, VkDevice device, uint32_t bufferSize)
+static VKBufferAndMemory
+createBuffer(VKState *state, uint32_t bufferSize)
 {
     VkBufferCreateInfo bufferCreateInfo = { 0 };
     bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -238,28 +236,88 @@ createBuffer(VkPhysicalDevice phyDevice, VkDevice device, uint32_t bufferSize)
     bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     VkBuffer buffer = { 0 };
-    VK_ASSERT_RESULT(vkCreateBuffer(device, &bufferCreateInfo, NULL, &buffer));
+    VK_CALL(vkCreateBuffer(state->device, &bufferCreateInfo, NULL, &buffer));
 
     VkMemoryRequirements memoryReqs;
-    vkGetBufferMemoryRequirements(device, buffer, &memoryReqs);
+    vkGetBufferMemoryRequirements(state->device, buffer, &memoryReqs);
 
     VkDeviceMemory bufferMemory = { 0 };
     VkMemoryAllocateInfo allocateInfo = { 0 };
     allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocateInfo.allocationSize = memoryReqs.size;
     allocateInfo.memoryTypeIndex = findMemoryType(
-        phyDevice,
+        state->phyDevice,
         memoryReqs.memoryTypeBits,
         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
-    VK_ASSERT_RESULT(vkAllocateMemory(device, &allocateInfo, NULL, &bufferMemory)); // allocate memory on device.
-    VK_ASSERT_RESULT(vkBindBufferMemory(device, buffer, bufferMemory, 0));
+    VK_CALL(vkAllocateMemory(state->device, &allocateInfo, NULL, &bufferMemory)); // allocate memory on device.
+    VK_CALL(vkBindBufferMemory(state->device, buffer, bufferMemory, 0));
 
-    VulkanBufferAndMemory result = { 0 };
+    VKBufferAndMemory result = { 0 };
     result.buffer = buffer;
     result.bufferMemory = bufferMemory;
     result.bufferSize = bufferSize;
     return result;
+}
+
+static void
+bindDescriptorSetWithBuffers(VKState *state,
+                             VKBufferAndMemory matrixA,
+                             VKBufferAndMemory matrixB,
+                             VKBufferAndMemory matrixC)
+{
+    // Bind buffer with descriptor set
+    VkDescriptorBufferInfo descriptorBufferInfoArray[3] = { 0 };
+    descriptorBufferInfoArray[0].buffer = matrixA.buffer;
+    descriptorBufferInfoArray[0].offset = 0;
+    descriptorBufferInfoArray[0].range = matrixA.bufferSize;
+
+    descriptorBufferInfoArray[1].buffer = matrixB.buffer;
+    descriptorBufferInfoArray[1].offset = 0;
+    descriptorBufferInfoArray[1].range = matrixB.bufferSize;
+
+    descriptorBufferInfoArray[2].buffer = matrixC.buffer;
+    descriptorBufferInfoArray[2].offset = 0;
+    descriptorBufferInfoArray[2].range = matrixC.bufferSize;
+
+    VkWriteDescriptorSet writeDescriptorSetsArray[3] = { 0 };
+    writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[0].dstSet = state->descriptorSet;
+    writeDescriptorSetsArray[0].dstBinding = 0;
+    writeDescriptorSetsArray[0].descriptorCount = 1;
+    writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
+
+    writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[1].dstSet = state->descriptorSet;
+    writeDescriptorSetsArray[1].dstBinding = 1;
+    writeDescriptorSetsArray[1].descriptorCount = 1;
+    writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
+
+    writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[2].dstSet = state->descriptorSet;
+    writeDescriptorSetsArray[2].dstBinding = 2;
+    writeDescriptorSetsArray[2].descriptorCount = 1;
+    writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[2].pBufferInfo = &descriptorBufferInfoArray[2];
+
+    vkUpdateDescriptorSets(state->device, ARRAY_LEN(writeDescriptorSetsArray), writeDescriptorSetsArray, 0, NULL);
+}
+
+static void
+createMatrixBuffers(VKState *state)
+{
+    uint32_t matrixASize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
+    uint32_t matrixBSize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
+    uint32_t matrixCSize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
+    VKBufferAndMemory matrixABufferAndMemory = createBuffer(state, matrixASize);
+    VKBufferAndMemory matrixBBufferAndMemory = createBuffer(state, matrixBSize);
+    VKBufferAndMemory matrixCBufferAndMemory = createBuffer(state, matrixCSize);
+
+    state->matrixABufferAndMemory = matrixABufferAndMemory;
+    state->matrixBBufferAndMemory = matrixBBufferAndMemory;
+    state->matrixCBufferAndMemory = matrixCBufferAndMemory;
 }
 
 static VkDescriptorSetLayout
@@ -287,7 +345,7 @@ createDescriptorSetLayout(VkDevice device)
     descriptorSetLayoutCreateInfo.pBindings = descriptorSetLayoutBindingArray;
 
     VkDescriptorSetLayout descriptorSetLayout;
-    VK_ASSERT_RESULT(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, NULL, &descriptorSetLayout));
+    VK_CALL(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, NULL, &descriptorSetLayout));
 
     return descriptorSetLayout;
 }
@@ -306,7 +364,7 @@ createDescriptorPool(VkDevice device)
     descriptorPoolCreateInfo.pPoolSizes = &descriptorPoolSize;
 
     VkDescriptorPool descriptorPool;
-    VK_ASSERT_RESULT(vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, NULL, &descriptorPool));
+    VK_CALL(vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, NULL, &descriptorPool));
 
     return descriptorPool;
 }
@@ -314,10 +372,7 @@ createDescriptorPool(VkDevice device)
 static VkDescriptorSet
 createDescriptorSet(VkDevice device,
                     VkDescriptorSetLayout descriptorSetLayout,
-                    VkDescriptorPool descriptorPool,
-                    VulkanBufferAndMemory matrixABuffer,
-                    VulkanBufferAndMemory matrixBBuffer,
-                    VulkanBufferAndMemory matrixCBuffer)
+                    VkDescriptorPool descriptorPool)
 {
     VkDescriptorSet descriptorSet;
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = { 0 };
@@ -326,46 +381,7 @@ createDescriptorSet(VkDevice device,
     descriptorSetAllocateInfo.descriptorSetCount = 1;
     descriptorSetAllocateInfo.pSetLayouts = &descriptorSetLayout;
 
-    VK_ASSERT_RESULT(vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, &descriptorSet));
-
-    // Bind buffer with descriptor set
-    VkDescriptorBufferInfo descriptorBufferInfoArray[3] = { 0 };
-    descriptorBufferInfoArray[0].buffer = matrixABuffer.buffer;
-    descriptorBufferInfoArray[0].offset = 0;
-    descriptorBufferInfoArray[0].range = matrixABuffer.bufferSize;
-
-    descriptorBufferInfoArray[1].buffer = matrixBBuffer.buffer;
-    descriptorBufferInfoArray[1].offset = 0;
-    descriptorBufferInfoArray[1].range = matrixBBuffer.bufferSize;
-
-    descriptorBufferInfoArray[2].buffer = matrixCBuffer.buffer;
-    descriptorBufferInfoArray[2].offset = 0;
-    descriptorBufferInfoArray[2].range = matrixCBuffer.bufferSize;
-
-    VkWriteDescriptorSet writeDescriptorSetsArray[3] = { 0 };
-    writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[0].dstSet = descriptorSet;
-    writeDescriptorSetsArray[0].dstBinding = 0;
-    writeDescriptorSetsArray[0].descriptorCount = 1;
-    writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
-
-    writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[1].dstSet = descriptorSet;
-    writeDescriptorSetsArray[1].dstBinding = 1;
-    writeDescriptorSetsArray[1].descriptorCount = 1;
-    writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
-
-    writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[2].dstSet = descriptorSet;
-    writeDescriptorSetsArray[2].dstBinding = 2;
-    writeDescriptorSetsArray[2].descriptorCount = 1;
-    writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[2].pBufferInfo = &descriptorBufferInfoArray[2];
-
-    vkUpdateDescriptorSets(device, ARRAY_LEN(writeDescriptorSetsArray), writeDescriptorSetsArray, 0, NULL);
-
+    VK_CALL(vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, &descriptorSet));
     return descriptorSet;
 }
 
@@ -380,11 +396,11 @@ createQueryPool(VkDevice device)
     };
 
     VkQueryPool queryPool = { 0 };
-    VK_ASSERT_RESULT(vkCreateQueryPool(device, &queryPoolCreateInfo, NULL, &queryPool));
+    VK_CALL(vkCreateQueryPool(device, &queryPoolCreateInfo, NULL, &queryPool));
     return queryPool;
 }
 
-static VulkanPipelineDefinition
+static VKPipelineDefinition
 createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout)
 {
     uint32_t filelength;
@@ -395,7 +411,7 @@ createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout
     createInfo.codeSize = filelength;
 
     VkShaderModule computeShaderModule;
-    VK_ASSERT_RESULT(vkCreateShaderModule(device, &createInfo, NULL, &computeShaderModule));
+    VK_CALL(vkCreateShaderModule(device, &createInfo, NULL, &computeShaderModule));
     free(spirvBinary);
 
     VkPipelineShaderStageCreateInfo shaderStageCreateInfo = { 0 };
@@ -409,7 +425,7 @@ createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutCreateInfo.setLayoutCount = 1;
     pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
-    VK_ASSERT_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, NULL, &pipelineLayout));
+    VK_CALL(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, NULL, &pipelineLayout));
 
     VkPipeline pipeline;
     VkComputePipelineCreateInfo pipelineCreateInfo = { 0 };
@@ -417,40 +433,34 @@ createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout
     pipelineCreateInfo.stage = shaderStageCreateInfo;
     pipelineCreateInfo.layout = pipelineLayout;
 
-    VK_ASSERT_RESULT(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, NULL, &pipeline));
+    VK_CALL(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, NULL, &pipeline));
 
-    VulkanPipelineDefinition result = { 0 };
+    VKPipelineDefinition result = { 0 };
     result.pipeline = pipeline;
     result.pipelineLayout = pipelineLayout;
     return result;
 }
 
-static VulkanCommandBufferAndPool
-createCommandBuffer(VulkanDeviceAndComputeQueue deviceAndQueue,
-                    VkDescriptorSet descriptorSet,
-                    VulkanPipelineDefinition pipeline,
-                    VkQueryPool queryPool)
+static void
+createCommandBuffer(VKState *state)
 {
-    VkCommandPool commandPool;
-    VkCommandBuffer commandBuffer;
-
     VkCommandPoolCreateInfo commandPoolCreateInfo = { 0 };
     commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     commandPoolCreateInfo.flags = 0;
-    commandPoolCreateInfo.queueFamilyIndex = deviceAndQueue.computeQueueFamilyIndex;
-    VK_ASSERT_RESULT(vkCreateCommandPool(deviceAndQueue.device, &commandPoolCreateInfo, NULL, &commandPool));
+    commandPoolCreateInfo.queueFamilyIndex = state->computeQueueFamilyIndex;
+    VK_CALL(vkCreateCommandPool(state->device, &commandPoolCreateInfo, NULL, &state->commandPool));
 
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = { 0 };
     commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.commandPool = commandPool;
+    commandBufferAllocateInfo.commandPool = state->commandPool;
     commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     commandBufferAllocateInfo.commandBufferCount = 1;
-    VK_ASSERT_RESULT(vkAllocateCommandBuffers(deviceAndQueue.device, &commandBufferAllocateInfo, &commandBuffer));
+    VK_CALL(vkAllocateCommandBuffers(state->device, &commandBufferAllocateInfo, &state->commandBuffer));
 
     VkCommandBufferBeginInfo beginInfo = { 0 };
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    VK_ASSERT_RESULT(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+    VK_CALL(vkBeginCommandBuffer(state->commandBuffer, &beginInfo));
 
     VkCommandBufferBeginInfo commandBufferInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -459,73 +469,59 @@ createCommandBuffer(VulkanDeviceAndComputeQueue deviceAndQueue,
         .pInheritanceInfo = NULL,
     };
 
-    vkCmdResetQueryPool(commandBuffer, queryPool, 0, 1);
-    vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, 0);
+    vkCmdResetQueryPool(state->commandBuffer, state->queryPool, 0, 1);
+    vkCmdWriteTimestamp(state->commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, state->queryPool, 0);
 
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipelineLayout, 0, 1, &descriptorSet, 0, NULL);
+    vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, state->pipelineDefinition.pipeline);
+    vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, state->pipelineDefinition.pipelineLayout, 0, 1, &state->descriptorSet, 0, NULL);
 
-    vkCmdDispatch(commandBuffer,
+    vkCmdDispatch(state->commandBuffer,
                   MATRIX_SIZE / WORKGROUP_SIZE, // how many workgroups to dispatch in X
                   MATRIX_SIZE / WORKGROUP_SIZE, // how many workgroups to dispatch in Y
                   1);
 
-    vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, 1);
+    vkCmdWriteTimestamp(state->commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, state->queryPool, 1);
 
-    VK_ASSERT_RESULT(vkEndCommandBuffer(commandBuffer));
-
-    VulkanCommandBufferAndPool result = { 0 };
-    result.commandBuffer = commandBuffer;
-    result.commandPool = commandPool;
-    return result;
+    VK_CALL(vkEndCommandBuffer(state->commandBuffer));
 }
 
-static VulkanInstance
+static VKState
 initalizeVulkan()
 {
-    VulkanInstance result = { 0 };
+    VKState result = { 0 };
     VkInstance instance = createInstance();
     VkPhysicalDevice phyDevice = findPhysicalDevice(instance);
-    VulkanDeviceAndComputeQueue deviceAndQueue = createDevice(phyDevice);
+    VKDeviceAndComputeQueue deviceAndQueue = createDevice(phyDevice);
 
-    uint32_t matrixASize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
-    uint32_t matrixBSize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
-    uint32_t matrixCSize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
-    VulkanBufferAndMemory matrixABufferAndMemory = createBuffer(phyDevice, deviceAndQueue.device, matrixASize);
-    VulkanBufferAndMemory matrixBBufferAndMemory = createBuffer(phyDevice, deviceAndQueue.device, matrixBSize);
-    VulkanBufferAndMemory matrixCBufferAndMemory = createBuffer(phyDevice, deviceAndQueue.device, matrixCSize);
     VkDescriptorSetLayout descriptorSetLayout = createDescriptorSetLayout(deviceAndQueue.device);
     VkDescriptorPool descriptorPool = createDescriptorPool(deviceAndQueue.device);
-    VkDescriptorSet descriptorSet = createDescriptorSet(deviceAndQueue.device, descriptorSetLayout, descriptorPool,
-                                                        matrixABufferAndMemory, matrixBBufferAndMemory, matrixCBufferAndMemory);
-    VkQueryPool queryPool = createQueryPool(deviceAndQueue.device);
-    VulkanPipelineDefinition pipelineDefinition = createComputePipeline(deviceAndQueue.device, descriptorSetLayout);
-    VulkanCommandBufferAndPool commandBufferAndPool = createCommandBuffer(deviceAndQueue, descriptorSet, pipelineDefinition, queryPool);
+    VkDescriptorSet descriptorSet = createDescriptorSet(deviceAndQueue.device, descriptorSetLayout, descriptorPool);
 
     result.instance = instance;
     result.phyDevice = phyDevice;
-    result.deviceAndQueue = deviceAndQueue;
-    result.matrixASize = matrixASize;
-    result.matrixABufferAndMemory = matrixABufferAndMemory;
-    result.matrixBBufferAndMemory = matrixBBufferAndMemory;
-    result.matrixCBufferAndMemory = matrixCBufferAndMemory;
+    result.device = deviceAndQueue.device;
+    result.computeQueue = deviceAndQueue.computeQueue;
+    result.computeQueueFamilyIndex = deviceAndQueue.computeQueueFamilyIndex;
     result.descriptorSetLayout = descriptorSetLayout;
     result.descriptorPool = descriptorPool;
     result.descriptorSet = descriptorSet;
+
+    VkQueryPool queryPool = createQueryPool(deviceAndQueue.device);
+    VKPipelineDefinition pipelineDefinition = createComputePipeline(deviceAndQueue.device, descriptorSetLayout);
+
     result.queryPool = queryPool;
     result.pipelineDefinition = pipelineDefinition;
-    result.commandBufferAndPool = commandBufferAndPool;
 
     return result;
 }
 
 static void
-runCommandBuffer(VulkanInstance instance)
+runCommandBuffer(VKState instance)
 {
     VkSubmitInfo submitInfo = {0};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &instance.commandBufferAndPool.commandBuffer;
+    submitInfo.pCommandBuffers = &instance.commandBuffer;
 
     VkFence fence;
     VkFenceCreateInfo fenceCreateInfo = {0};
@@ -533,89 +529,81 @@ runCommandBuffer(VulkanInstance instance)
     fenceCreateInfo.flags = 0;
 
     {
-        VK_ASSERT_RESULT(vkCreateFence(instance.deviceAndQueue.device, &fenceCreateInfo, NULL, &fence));
+        VK_CALL(vkCreateFence(instance.device, &fenceCreateInfo, NULL, &fence));
         double start = getWallTime();
-        VK_ASSERT_RESULT(vkQueueSubmit(instance.deviceAndQueue.computeQueue, 1, &submitInfo, fence));
-        VK_ASSERT_RESULT(vkWaitForFences(instance.deviceAndQueue.device, 1, &fence, VK_TRUE, 100000000000));
+        VK_CALL(vkQueueSubmit(instance.computeQueue, 1, &submitInfo, fence));
+        VK_CALL(vkWaitForFences(instance.device, 1, &fence, VK_TRUE, 100000000000));
         double end = getWallTime();
         double execTime = end - start;
         double gflops = ((2 * pow(MATRIX_SIZE, 3)) / execTime) / 1e9;
         printf("It took %fs [%f GFLOPS]\n", execTime, gflops);
 
         uint64_t ts[2];
-        VK_ASSERT_RESULT(vkGetQueryPoolResults(instance.deviceAndQueue.device, instance.queryPool,
+        VK_CALL(vkGetQueryPoolResults(instance.device, instance.queryPool,
                                                0, 2, sizeof(uint64_t) * 2, ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
 
         double msTime = (ts[1] - ts[0]);
         printf("Vulkan execution time = %.2f nanoseconds, %.2f ms\n", msTime, msTime / 1000000);
 
-        vkDestroyFence(instance.deviceAndQueue.device, fence, NULL);
+        vkDestroyFence(instance.device, fence, NULL);
     }
 
     {
-        VK_ASSERT_RESULT(vkCreateFence(instance.deviceAndQueue.device, &fenceCreateInfo, NULL, &fence));
+        VK_CALL(vkCreateFence(instance.device, &fenceCreateInfo, NULL, &fence));
         double start = getWallTime();
-        VK_ASSERT_RESULT(vkQueueSubmit(instance.deviceAndQueue.computeQueue, 1, &submitInfo, fence));
-        VK_ASSERT_RESULT(vkWaitForFences(instance.deviceAndQueue.device, 1, &fence, VK_TRUE, 100000000000));
+        VK_CALL(vkQueueSubmit(instance.computeQueue, 1, &submitInfo, fence));
+        VK_CALL(vkWaitForFences(instance.device, 1, &fence, VK_TRUE, 100000000000));
         double end = getWallTime();
         double execTime = end - start;
         double gflops = ((2 * pow(MATRIX_SIZE, 3)) / execTime) / 1e9;
         printf("It took %fs [%f GFLOPS]\n", execTime, gflops);
 
-        vkDestroyFence(instance.deviceAndQueue.device, fence, NULL);
+        vkDestroyFence(instance.device, fence, NULL);
     }
+}
+
+static void
+fillMatrixWithData(VKState *state, VKBufferAndMemory buffer)
+{
+    void *mappedMemory = NULL;
+    vkMapMemory(state->device, buffer.bufferMemory, 0, buffer.bufferSize, 0, &mappedMemory);
+    float *floatMappedMemory = mappedMemory;
+
+    for (int row = 0; row < MATRIX_SIZE; row++)
+    {
+        for (int col = 0; col < MATRIX_SIZE; col++)
+        {
+            floatMappedMemory[row * MATRIX_SIZE + col] = 2.0;
+        }
+    }
+
+    vkUnmapMemory(state->device, buffer.bufferMemory);
 }
 
 int main()
 {
-    VulkanInstance instance = initalizeVulkan();
+    VKState state = initalizeVulkan();
+
+    createMatrixBuffers(&state);
+    bindDescriptorSetWithBuffers(&state,
+                                 state.matrixABufferAndMemory,
+                                 state.matrixBBufferAndMemory,
+                                 state.matrixCBufferAndMemory);
+
+    createCommandBuffer(&state);
+
 
     // Verify working sgemm
-    {
-        void *mappedMemory = NULL;
-        vkMapMemory(instance.deviceAndQueue.device,
-                    instance.matrixABufferAndMemory.bufferMemory, 0,
-                    instance.matrixABufferAndMemory.bufferSize, 0,
-                    &mappedMemory);
-        float *floatMappedMemory = mappedMemory;
+    fillMatrixWithData(&state, state.matrixABufferAndMemory);
+    fillMatrixWithData(&state, state.matrixBBufferAndMemory);
 
-        for (int row = 0; row < MATRIX_SIZE; row++)
-        {
-            for (int col = 0; col < MATRIX_SIZE; col++)
-            {
-                floatMappedMemory[row * MATRIX_SIZE + col] = 2.0;
-            }
-        }
-
-        vkUnmapMemory(instance.deviceAndQueue.device, instance.matrixABufferAndMemory.bufferMemory);
-    }
+    runCommandBuffer(state);
 
     {
         void *mappedMemory = NULL;
-        vkMapMemory(instance.deviceAndQueue.device,
-                    instance.matrixBBufferAndMemory.bufferMemory, 0,
-                    instance.matrixBBufferAndMemory.bufferSize, 0,
-                    &mappedMemory);
-        float *floatMappedMemory = mappedMemory;
-
-        for (int row = 0; row < MATRIX_SIZE; row++)
-        {
-            for (int col = 0; col < MATRIX_SIZE; col++)
-            {
-                floatMappedMemory[row * MATRIX_SIZE + col] = 2.0;
-            }
-        }
-
-        vkUnmapMemory(instance.deviceAndQueue.device, instance.matrixBBufferAndMemory.bufferMemory);
-    }
-
-    runCommandBuffer(instance);
-
-    {
-        void *mappedMemory = NULL;
-        vkMapMemory(instance.deviceAndQueue.device,
-                    instance.matrixCBufferAndMemory.bufferMemory, 0,
-                    instance.matrixCBufferAndMemory.bufferSize, 0,
+        vkMapMemory(state.device,
+                    state.matrixCBufferAndMemory.bufferMemory, 0,
+                    state.matrixCBufferAndMemory.bufferSize, 0,
                     &mappedMemory);
         float *floatMappedMemory = mappedMemory;
 
