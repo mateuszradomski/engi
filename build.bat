@@ -1,6 +1,7 @@
 pushd shaders
 glslc.exe -O shader.comp -o shader.spirv
 glslc.exe -O shader_faster.comp -o shader_faster.spirv
+glslc.exe -O shader_m3.comp -o shader_m3.spirv
 popd
 
 @REM Build base file

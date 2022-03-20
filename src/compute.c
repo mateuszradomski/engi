@@ -69,6 +69,27 @@ typedef struct VKState
     }																									\
 }
 
+uint32_t glob_rand_state = 0x34fae2;
+
+static uint32_t
+xorshift32()
+{
+	uint32_t *state = &glob_rand_state;
+	uint32_t x = *state;
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	return *state = x;
+}
+
+static double
+randomUnilateral()
+{
+    uint32_t rand = xorshift32();
+    float result = ((float)(rand) / (float)(0xffffffff));
+    return result;
+}
+
 #ifdef _WIN32
 #include <Windows.h>
 double getWallTime()
@@ -142,7 +163,7 @@ findPhysicalDevice(VkInstance instance)
     VkResult ss = vkEnumeratePhysicalDevices(instance, &deviceCount, devicesArray);
     
     // TODO(radomski): Choose the most powerfull GPU
-    VkPhysicalDevice result = devicesArray[1];
+    VkPhysicalDevice result = devicesArray[0];
     free(devicesArray);
     return result;
 }
@@ -576,14 +597,16 @@ runCommandBuffer(VKState instance)
     for(int i = 0; i < 8; i++)
     {
         VK_CALL(vkCreateFence(instance.device, &fenceCreateInfo, NULL, &fence));
+        double t1 = getWallTime();
         VK_CALL(vkQueueSubmit(instance.computeQueue, 1, &submitInfo, fence));
         VK_CALL(vkWaitForFences(instance.device, 1, &fence, VK_TRUE, 100000000000));
+        double t2 = getWallTime();
         uint64_t ts[2];
         VK_CALL(vkGetQueryPoolResults(instance.device, instance.queryPool,
                                                0, 2, sizeof(uint64_t) * 2, ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
         double execTime = (ts[1] - ts[0]) / 1e9;
         double gflops = ((2 * pow(MATRIX_SIZE, 3)) / execTime) / 1e9;
-        printf("It took %fs [%f GFLOPS]\n", execTime, gflops);
+        printf("%fs[%f] [%f GFLOPS]\n", execTime, t2-t1, gflops);
 
         vkDestroyFence(instance.device, fence, NULL);
     }
@@ -600,10 +623,33 @@ fillMatrixWithData(VKState *state, VKBufferAndMemory buffer)
     {
         for (int col = 0; col < MATRIX_SIZE; col++)
         {
-            floatMappedMemory[row * MATRIX_SIZE + col] = 2.0;
+            floatMappedMemory[row * MATRIX_SIZE + col] = randomUnilateral();
         }
     }
 
+    vkUnmapMemory(state->device, buffer.bufferMemory);
+}
+
+static void
+printMatrix(float *data, uint32_t matrixSize)
+{
+    for (uint32_t row = 0; row < matrixSize; row++)
+    {
+        for (uint32_t col = 0; col < matrixSize; col++)
+        {
+            printf("%f ", data[row * matrixSize + col]);
+        }
+
+        printf("\n");
+    }
+}
+
+static void
+printBufferedMatrix(VKState *state, VKBufferAndMemory buffer)
+{
+    void *mappedMemory = NULL;
+    vkMapMemory(state->device, buffer.bufferMemory, 0, buffer.bufferSize, 0, &mappedMemory);
+    printMatrix((float *)mappedMemory, MATRIX_SIZE);
     vkUnmapMemory(state->device, buffer.bufferMemory);
 }
 
@@ -626,16 +672,23 @@ int main()
 
     runCommandBuffer(state);
 
-    {
-        void *mappedMemory = NULL;
-        vkMapMemory(state.device,
-                    state.matrixCBufferAndMemory.bufferMemory, 0,
-                    state.matrixCBufferAndMemory.bufferSize, 0,
-                    &mappedMemory);
-        float *floatMappedMemory = mappedMemory;
+    #if 0
+    copyStagingBufferToDevice(&state, state.matrixADevice, state.matrixABufferAndMemory);
+    copyStagingBufferToDevice(&state, state.matrixBDevice, state.matrixBBufferAndMemory);
+    copyStagingBufferToDevice(&state, state.matrixCDevice, state.matrixCBufferAndMemory);
 
-        printf("floatMappedMemory = %f\n", floatMappedMemory[0]);
-    }
+    printf("Matrix A ***********\n");
+    printBufferedMatrix(&state, state.matrixABufferAndMemory);
+    printf("********************\n");
+
+    printf("Matrix B ***********\n");
+    printBufferedMatrix(&state, state.matrixBBufferAndMemory);
+    printf("********************\n");
+
+    printf("Matrix C ***********\n");
+    printBufferedMatrix(&state, state.matrixCBufferAndMemory);
+    printf("********************\n");
+    #endif
 
     return 0;
 }

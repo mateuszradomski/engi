@@ -37,17 +37,17 @@ void main()
    for(uint tileIndex = 0; tileIndex < numTiles; tileIndex++)
    {
       // Each worker in the thread group will load the value it's responsible for
-      const uint tiledRow = TS * tileIndex + globalRow;
-      const uint tiledCol = TS * tileIndex + globalCol;
-      ATile[globalRow][globalCol] = matrixA[tiledRow * MATRIX_SIZE + globalCol];
-      BTile[globalRow][globalCol] = matrixB[globalRow * MATRIX_SIZE + tiledCol];
+      const uint tiledRow = TS * tileIndex + localRow;
+      const uint tiledCol = TS * tileIndex + localCol;
+      ATile[localRow][localCol] = matrixA[tiledCol + MATRIX_SIZE * globalRow];
+      BTile[localRow][localCol] = matrixB[globalCol + MATRIX_SIZE * tiledRow];
 
       // Wait for all workers to finish sync
       barrier();
 
       for(int k = 0; k < TS; k++)
       {
-         sum += ATile[k][globalCol] * ATile[globalRow][k];
+         sum += ATile[localRow][k] * BTile[k][localCol];
       }
 
       // Wait for all workers to finish before writing the result back in
