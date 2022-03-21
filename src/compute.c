@@ -9,7 +9,7 @@
 #include <time.h>
 
 #define MATRIX_SIZE 4096
-#define WORKGROUP_SIZE 32
+#define WORKGROUP_SIZE 8
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
@@ -165,6 +165,11 @@ findPhysicalDevice(VkInstance instance)
     // TODO(radomski): Choose the most powerfull GPU
     VkPhysicalDevice result = devicesArray[0];
     free(devicesArray);
+
+    VkPhysicalDeviceProperties props = { 0 };
+    vkGetPhysicalDeviceProperties(result, &props);
+    printf("Device name = %s\n", props.deviceName);
+
     return result;
 }
 
@@ -470,7 +475,7 @@ static VKPipelineDefinition
 createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout)
 {
     uint32_t filelength;
-    uint8_t *spirvBinary = readEntireFile(&filelength, "shaders/shader_faster.spirv");
+    uint8_t *spirvBinary = readEntireFile(&filelength, "shaders/matmul_v2.spv");
     VkShaderModuleCreateInfo createInfo = { 0 };
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     createInfo.pCode = (uint32_t *)spirvBinary;

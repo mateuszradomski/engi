@@ -4,6 +4,8 @@
 #define MATRIX_SIZE 4096
 #define WORKGROUP_SIZE 32
 #define TS WORKGROUP_SIZE
+#define WPT 8
+#define RTS (TS/WPT)
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = WORKGROUP_SIZE, local_size_z = 1 ) in;
 
 layout(set = 0, binding = 0) buffer bufA
@@ -31,28 +33,43 @@ void main()
    const uint localRow = gl_LocalInvocationID.x;
    const uint localCol = gl_LocalInvocationID.y;
 
-   float sum = 0.0;
+
+   float sum[WPT];
+   for(int i=0; i<WPT; i++)
+   {
+      sum[i] = 0.0;
+   }
 
    const int numTiles = MATRIX_SIZE / TS;
    for(uint tileIndex = 0; tileIndex < numTiles; tileIndex++)
    {
-      // Each worker in the thread group will load the value it's responsible for
-      const uint tiledRow = TS * tileIndex + localRow;
-      const uint tiledCol = TS * tileIndex + localCol;
-      ATile[localRow][localCol] = matrixA[tiledCol + MATRIX_SIZE * globalRow];
-      BTile[localRow][localCol] = matrixB[globalCol + MATRIX_SIZE * tiledRow];
+      // Each worker in the thread group will load the values it's responsible for
+      for(int w=0; w<WPT; w++)
+      {
+         const uint tiledRow = TS * tileIndex + globalRow;
+         const uint tiledCol = TS * tileIndex + globalCol;
+
+         ATile[globalRow + w*RTS][globalCol] = matrixA[(tiledRow + w*RTS) * MATRIX_SIZE + globalCol];
+         BTile[globalRow + w*RTS][globalCol] = matrixB[(globalRow + w*RTS) * MATRIX_SIZE + tiledCol];
+      }
 
       // Wait for all workers to finish sync
       barrier();
 
       for(int k = 0; k < TS; k++)
       {
-         sum += ATile[localRow][k] * BTile[k][localCol];
+         for(int w=0; w<WPT; w++)
+         {
+            sum[w] += ATile[k][globalCol] * BTile[globalRow + w*RTS][k];
+         }
       }
 
       // Wait for all workers to finish before writing the result back in
       barrier();
    }
 
-   matrixC[MATRIX_SIZE * globalRow + globalCol] = sum;
+   for(int w=0; w<WPT; w++)
+   {
+      matrixC[(globalRow + w*RTS)*MATRIX_SIZE + globalRow] = sum[w];
+   }
 }

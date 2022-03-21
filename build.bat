@@ -1,11 +1,8 @@
 pushd shaders
-glslc.exe -O shader.comp -o shader.spirv
-glslc.exe -O shader_faster.comp -o shader_faster.spirv
-glslc.exe -O shader_m3.comp -o shader_m3.spirv
+glslc.exe -O matmul_v1.comp -o matmul_v1.spv
+glslc.exe -O matmul_v2.comp -o matmul_v2.spv
+glslc.exe -O matmul_v3.comp -o matmul_v3.spv
 popd
-
-@REM Build base file
-@REM zig c++ .\src\lodepng.cpp .\src\main.cpp -o mandelbrot.exe -g -Og -IC:\clibs\glfw-3.3.4\include -IC:\VulkanSDK\1.2.182.0\Include C:\clibs\glfw-3.3.4\lib-mingw-w64\libglfw3.a -lopengl32 -luser32 -lgdi32 C:\VulkanSDK\1.2.182.0\Lib\vulkan-1.lib -Wno-writable-strings
 
 @REM Build my file
 clang .\src\compute.c -std=c11 -o compute.exe -g -Og -IC:\clibs\glfw-3.3.4\include -IC:\VulkanSDK\1.2.182.0\Include C:\clibs\glfw-3.3.4\lib-mingw-w64\libglfw3.a -lopengl32 -luser32 -lgdi32 C:\VulkanSDK\1.2.182.0\Lib\vulkan-1.lib -Wno-writable-strings
