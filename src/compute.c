@@ -131,7 +131,7 @@ createInstance()
     appInfo.applicationVersion = 0;
     appInfo.pEngineName = "notanengine";
     appInfo.engineVersion = 0;
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    appInfo.apiVersion = VK_API_VERSION_1_2;
 
     VkInstanceCreateInfo createInfo = { 0 };
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -163,7 +163,7 @@ findPhysicalDevice(VkInstance instance)
     VkResult ss = vkEnumeratePhysicalDevices(instance, &deviceCount, devicesArray);
     
     // TODO(radomski): Choose the most powerfull GPU
-    VkPhysicalDevice result = devicesArray[0];
+    VkPhysicalDevice result = devicesArray[1];
     free(devicesArray);
 
     VkPhysicalDeviceProperties props = { 0 };
@@ -534,11 +534,11 @@ createCommandBuffer(VKState *state)
         .pInheritanceInfo = NULL,
     };
 
-    vkCmdResetQueryPool(state->commandBuffer, state->queryPool, 0, 1);
-    vkCmdWriteTimestamp(state->commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, state->queryPool, 0);
-
     vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, state->pipelineDefinition.pipeline);
     vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, state->pipelineDefinition.pipelineLayout, 0, 1, &state->descriptorSet, 0, NULL);
+
+    vkCmdResetQueryPool(state->commandBuffer, state->queryPool, 0, 1);
+    vkCmdWriteTimestamp(state->commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, state->queryPool, 0);
 
     vkCmdDispatch(state->commandBuffer,
                   MATRIX_SIZE / WORKGROUP_SIZE, // how many workgroups to dispatch in X
@@ -599,7 +599,7 @@ runCommandBuffer(VKState instance)
     fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceCreateInfo.flags = 0;
 
-    for(int i = 0; i < 8; i++)
+    for(int i = 0; i < 3; i++)
     {
         VK_CALL(vkCreateFence(instance.device, &fenceCreateInfo, NULL, &fence));
         double t1 = getWallTime();

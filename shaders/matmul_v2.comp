@@ -5,19 +5,19 @@
 #define MATRIX_SIZE 4096
 #define WORKGROUP_SIZE 8
 #define TS WORKGROUP_SIZE
-layout (local_size_x = WORKGROUP_SIZE, local_size_y = WORKGROUP_SIZE) in;
+layout (local_size_x = WORKGROUP_SIZE, local_size_y = WORKGROUP_SIZE, local_size_z = 1) in;
 
-layout(set = 0, binding = 0) readonly buffer bufA
+layout(set = 0, binding = 0, std430) readonly buffer bufA
 {
    float matrixA[];
 };
 
-layout(set = 0, binding = 1) readonly buffer bufB
+layout(set = 0, binding = 1, std430) readonly buffer bufB
 {
    float matrixB[];
 };
 
-layout(set = 0, binding = 2) writeonly buffer bufC
+layout(set = 0, binding = 2, std430) writeonly buffer bufC
 {
    float matrixC[];
 };
@@ -40,6 +40,7 @@ void main()
       // Each worker in the thread group will load the value it's responsible for
       const uint tiledRow = TS * tileIndex + localRow;
       const uint tiledCol = TS * tileIndex + localCol;
+
       ATile[localRow][localCol] = matrixA[tiledCol + MATRIX_SIZE * globalRow];
       BTile[localRow][localCol] = matrixB[globalCol + MATRIX_SIZE * tiledRow];
 
@@ -53,7 +54,6 @@ void main()
       }
 
       // Wait for all workers to finish before writing the result back in
-      memoryBarrierShared();
       barrier();
    }
 
