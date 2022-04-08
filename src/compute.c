@@ -8,6 +8,8 @@
 #include <math.h>
 #include <time.h>
 
+#include "compute.h"
+
 #define MATRIX_SIZE 4096
 #define WORKGROUP_SIZE 8
 
@@ -59,6 +61,7 @@ typedef struct VKState
     VkCommandBuffer commandBuffer;
 } VKState;
 
+
 #define VK_CALL(f) 																				        \
 {																										\
     VkResult res = (f);																					\
@@ -101,9 +104,48 @@ double getWallTime()
 }
 #endif
 
-static uint8_t *
-readEntireFile(uint32_t *fileLength, const char *fileName)
+static StringSplitIterator
+StringSplit(StringSlice string, char delim)
 {
+  StringSplitIterator it = { 0 };
+
+  it.str = string.bytes;
+  it.strLength = string.length;
+  it.head = string.bytes;
+  it.delim = delim;
+
+  return it;
+}
+
+static StringSlice
+NextInSplit(StringSplitIterator *it)
+{
+  StringSlice result = { 0 };
+
+  uint32_t alreadyRead = (uint32_t)(it->head - it->str);
+
+  if(alreadyRead < it->strLength) {
+    result.bytes = it->head;
+    uint32_t bytesLeft = it->strLength - alreadyRead;
+    
+    for(uint32_t i = 0; (i < bytesLeft) && (it->head[0] != it->delim); i++) {
+      it->head++;
+      result.length += 1;
+    }
+
+    if(it->head[0] == it->delim) {
+      it->head++;
+    }
+  }
+
+  return result;
+}
+
+static Data
+readEntireFile(const char *fileName)
+{
+    Data result = { 0 };
+
     FILE *fp = fopen(fileName, "rb");
     if (fp == NULL)
     {
@@ -111,15 +153,28 @@ readEntireFile(uint32_t *fileLength, const char *fileName)
     }
 
     fseek(fp, 0, SEEK_END);
-    *fileLength = ftell(fp);
+    result.length = ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
-    char *str = malloc(sizeof(char) * (*fileLength + 1));
-    fread(str, *fileLength, sizeof(char), fp);
+    uint8_t *str = malloc(sizeof(uint8_t) * (result.length + 1));
+    fread(str, result.length, sizeof(char), fp);
     fclose(fp);
-    str[*fileLength] = 0x0;
+    str[result.length] = 0x0;
+    result.bytes = str;
 
-    return (uint8_t *)str;
+    return result;
+}
+
+static StringSlice
+readEntireFileStr(const char *filename)
+{
+    StringSlice result = { 0 };
+    Data data = readEntireFile(filename);
+
+    result.bytes = (char *)data.bytes;
+    result.length = data.length - 1;
+
+    return result;
 }
 
 static VkInstance
@@ -474,16 +529,15 @@ createQueryPool(VkDevice device)
 static VKPipelineDefinition
 createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout)
 {
-    uint32_t filelength;
-    uint8_t *spirvBinary = readEntireFile(&filelength, "shaders/matmul_v2.spv");
+    Data spirvData = readEntireFile("shaders/matmul_v2.spv");
     VkShaderModuleCreateInfo createInfo = { 0 };
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.pCode = (uint32_t *)spirvBinary;
-    createInfo.codeSize = filelength;
+    createInfo.pCode = (uint32_t *)spirvData.bytes;
+    createInfo.codeSize = spirvData.length;
 
     VkShaderModule computeShaderModule;
     VK_CALL(vkCreateShaderModule(device, &createInfo, NULL, &computeShaderModule));
-    free(spirvBinary);
+    free(spirvData.bytes);
 
     VkPipelineShaderStageCreateInfo shaderStageCreateInfo = { 0 };
     shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -658,8 +712,63 @@ printBufferedMatrix(VKState *state, VKBufferAndMemory buffer)
     vkUnmapMemory(state->device, buffer.bufferMemory);
 }
 
+static COOMatrix
+ReadMatrixFormatToCOO(const char *filename)
+{
+    StringSlice str = readEntireFileStr(filename);
+    COOMatrix result = { 0 };
+
+    StringSplitIterator lineIter = StringSplit(str, '\n');
+    StringSlice line = { 0 };
+    while((line = NextInSplit(&lineIter)).bytes != NULL)
+    {
+        if(line.bytes[0] != '%') {
+            break;
+        }
+    }
+
+    {
+        // This line has M x N [element count]
+        StringSplitIterator partIter = StringSplit(line, ' ');
+        StringSlice MStr = NextInSplit(&partIter);
+        StringSlice NStr = NextInSplit(&partIter);
+        StringSlice ElementNumStr = NextInSplit(&partIter);
+        assert(MStr.bytes && NStr.bytes && ElementNumStr.bytes);
+
+        result.elementNum = atoi(ElementNumStr.bytes);
+        result.data = malloc(result.elementNum * sizeof(result.data[0]));
+        result.row = malloc(result.elementNum * sizeof(result.row[0]));
+        result.col = malloc(result.elementNum * sizeof(result.col[0]));
+
+        printf("MStr = %.*s\n", MStr.length, MStr.bytes);
+        printf("NStr = %.*s\n", NStr.length, NStr.bytes);
+        printf("ElementNum = %d\n", result.elementNum);
+    }
+
+    uint32_t elementIndex = 0;
+    while((line = NextInSplit(&lineIter)).bytes != NULL)
+    {
+        StringSplitIterator partIter = StringSplit(line, ' ');
+        StringSlice RowStr = NextInSplit(&partIter);
+        StringSlice ColStr = NextInSplit(&partIter);
+        StringSlice ValueStr = NextInSplit(&partIter);
+        assert(RowStr.bytes && ColStr.bytes && !ValueStr.bytes);
+
+        result.row[elementIndex] = atoi(RowStr.bytes);
+        result.col[elementIndex] = atoi(ColStr.bytes);
+        result.data[elementIndex] = 1.0f;
+        elementIndex += 1;
+    }
+    assert(elementIndex == result.elementNum);
+
+    return result;
+}
+
 int main()
 {
+    COOMatrix bcsstk30COO = ReadMatrixFormatToCOO("../data/bcsstk30.mtx");
+    return 0;
+
     VKState state = initalizeVulkan();
 
     createMatrixBuffers(&state);
