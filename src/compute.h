@@ -15,28 +15,30 @@ typedef struct StringSlice
     uint32_t length;
 } StringSlice;
 
+#define COMP_STR_TO_STRING_SLICE(str) { .bytes = str, .length = sizeof(str) - 1 }
+
 typedef struct StringSplitIterator
 {
-    char *str, *head, delim;
-    uint32_t strLength;
+    char *str, *head, *delim;
+    uint32_t strLength, delimLength;
 } StringSplitIterator;
 
 typedef struct COOMatrix
 {
     float *data;
-    uint32_t *row;
-    uint32_t *col;
-    uint32_t elementNum;
+    uint32_t *row, *col, elementNum;
 } COOMatrix;
 
-#define INVALID_COLUMN 0xffffffff;
+// If in columnIndex means no data (zero) at that space
+#define INVALID_COLUMN 0xffffffff
 
 typedef struct ELLMatrix
 {
     float *data;
-    uint32_t *columnIndex; // Index of column for that data [INVALID_COLUMN for no data]
-    uint32_t M;           // Number of rows
-    uint32_t P;           // Number of columns
+    uint32_t M, P, *columnIndex;
 } ELLMatrix;
+
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #endif

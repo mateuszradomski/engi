@@ -104,8 +104,30 @@ double getWallTime()
 }
 #endif
 
+static bool
+StringsMatchRaw(char *str1, uint32_t str1Length, char *str2, uint32_t str2Length) {
+    if(str1Length == str2Length) {
+        for(int i = 0; i < str1Length; i++) {
+            if(str1[i] != str2[i]) {
+                return false;
+            }
+        }
+
+        return true;
+    } else {
+        return false;
+    }
+}
+
+static bool
+StringsMatch(StringSlice str1, StringSlice str2)
+{
+    return StringsMatchRaw(str1.bytes, str1.length, str2.bytes, str2.length);
+}
+
+
 static StringSplitIterator
-StringSplit(StringSlice string, char delim)
+StringSplit(StringSlice string, char *delim)
 {
   StringSplitIterator it = { 0 };
 
@@ -113,6 +135,7 @@ StringSplit(StringSlice string, char delim)
   it.strLength = string.length;
   it.head = string.bytes;
   it.delim = delim;
+  it.delimLength = strlen(delim);
 
   return it;
 }
@@ -127,14 +150,18 @@ NextInSplit(StringSplitIterator *it)
   if(alreadyRead < it->strLength) {
     result.bytes = it->head;
     uint32_t bytesLeft = it->strLength - alreadyRead;
-    
-    for(uint32_t i = 0; (i < bytesLeft) && (it->head[0] != it->delim); i++) {
-      it->head++;
-      result.length += 1;
+
+    for (uint32_t i = 0;
+         (i < bytesLeft) && (it->delimLength < bytesLeft) &&
+          !StringsMatchRaw(it->head, it->delimLength, it->delim, it->delimLength);
+         i++)
+    {
+        it->head++;
+        result.length += 1;
     }
 
-    if(it->head[0] == it->delim) {
-      it->head++;
+    if(StringsMatchRaw(it->head, it->delimLength, it->delim, it->delimLength)) {
+      it->head += it->delimLength;
     }
   }
 
@@ -718,8 +745,24 @@ ReadMatrixFormatToCOO(const char *filename)
     StringSlice str = readEntireFileStr(filename);
     COOMatrix result = { 0 };
 
-    StringSplitIterator lineIter = StringSplit(str, '\n');
-    StringSlice line = { 0 };
+    bool isSymmetric = false;
+
+    StringSplitIterator lineIter = StringSplit(str, "\r\n");
+    StringSlice line = NextInSplit(&lineIter);
+
+    {
+        // First line of the header contains info about encoding
+        StringSplitIterator partIter = StringSplit(line, " ");
+        StringSlice part = { 0 };
+        while((part = NextInSplit(&partIter)).bytes != NULL)
+        {
+            StringSlice sym = COMP_STR_TO_STRING_SLICE("symmetric");
+            if(StringsMatch(part, sym)) {
+                isSymmetric = true;
+            }
+        }
+    }
+
     while((line = NextInSplit(&lineIter)).bytes != NULL)
     {
         if(line.bytes[0] != '%') {
@@ -729,13 +772,14 @@ ReadMatrixFormatToCOO(const char *filename)
 
     {
         // This line has M x N [element count]
-        StringSplitIterator partIter = StringSplit(line, ' ');
+        StringSplitIterator partIter = StringSplit(line, " ");
         StringSlice MStr = NextInSplit(&partIter);
         StringSlice NStr = NextInSplit(&partIter);
         StringSlice ElementNumStr = NextInSplit(&partIter);
         assert(MStr.bytes && NStr.bytes && ElementNumStr.bytes);
 
-        result.elementNum = atoi(ElementNumStr.bytes);
+        uint32_t factor = isSymmetric ? 2 : 1;
+        result.elementNum = atoi(ElementNumStr.bytes) * factor;
         result.data = malloc(result.elementNum * sizeof(result.data[0]));
         result.row = malloc(result.elementNum * sizeof(result.row[0]));
         result.col = malloc(result.elementNum * sizeof(result.col[0]));
@@ -748,18 +792,89 @@ ReadMatrixFormatToCOO(const char *filename)
     uint32_t elementIndex = 0;
     while((line = NextInSplit(&lineIter)).bytes != NULL)
     {
-        StringSplitIterator partIter = StringSplit(line, ' ');
+        StringSplitIterator partIter = StringSplit(line, " ");
         StringSlice RowStr = NextInSplit(&partIter);
         StringSlice ColStr = NextInSplit(&partIter);
         StringSlice ValueStr = NextInSplit(&partIter);
-        assert(RowStr.bytes && ColStr.bytes && !ValueStr.bytes);
+        assert(RowStr.bytes && ColStr.bytes && ValueStr.length == 0);
 
-        result.row[elementIndex] = atoi(RowStr.bytes);
-        result.col[elementIndex] = atoi(ColStr.bytes);
+        uint32_t row = atoi(RowStr.bytes);
+        uint32_t col = atoi(ColStr.bytes);
+        result.row[elementIndex] = row;
+        result.col[elementIndex] = col;
         result.data[elementIndex] = 1.0f;
         elementIndex += 1;
+
+        if(isSymmetric) {
+            if(col == row) {
+                result.elementNum -= 1;
+            } else {
+                result.row[elementIndex] = col;
+                result.col[elementIndex] = row;
+                result.data[elementIndex] = 1.0f;
+                elementIndex += 1;
+            }
+        }
     }
     assert(elementIndex == result.elementNum);
+
+    return result;
+}
+
+static ELLMatrix
+COOToELLMatrix(COOMatrix matrix)
+{
+    ELLMatrix result = { 0 };
+
+    uint32_t minRow = INT_MAX;
+    uint32_t minCol = INT_MAX;
+    uint32_t maxRow = 0;
+
+    for(int i = 0; i < matrix.elementNum; i++)
+    {
+        minRow = MIN(matrix.row[i], minRow);
+        minCol = MIN(matrix.col[i], minCol);
+        maxRow = MAX(matrix.row[i], maxRow);
+    }
+
+    uint32_t M = maxRow-minRow+1;
+    uint32_t *PArray = malloc(M*sizeof(uint32_t));
+    memset(PArray, 0, M*sizeof(uint32_t));
+
+    for (int i = 0; i < matrix.elementNum; i++)
+    {
+        PArray[matrix.row[i] - minRow] += 1;
+    }
+
+    uint32_t P = 0;
+    for(uint32_t rowIndex = 0; rowIndex < M; rowIndex++)
+    {
+        P = MAX(P, PArray[rowIndex]);
+    }
+
+    free(PArray);
+
+    result.P = P;
+    result.M = M;
+    result.data = malloc(M*P*sizeof(result.data[0]));
+    result.columnIndex = malloc(M * P * sizeof(result.columnIndex[0]));
+    
+    memset(result.data, 0, M*P*sizeof(result.data[0]));
+    memset(result.columnIndex, 0xff, M*P*sizeof(result.columnIndex[0]));
+
+    for (int i = 0; i < matrix.elementNum; i++)
+    {
+        uint32_t startIndex = (matrix.row[i] - minRow) * result.P;
+        uint32_t endIndex = (matrix.row[i] - minRow + 1) * result.P;
+        for(uint32_t k = startIndex; k < endIndex; k++)
+        {
+            if(result.columnIndex[k] == INVALID_COLUMN) {
+                result.columnIndex[k] = matrix.col[i] - minCol;
+            }
+        }
+
+        PArray[matrix.row[i] - minRow] += 1;
+    }
 
     return result;
 }
@@ -767,6 +882,7 @@ ReadMatrixFormatToCOO(const char *filename)
 int main()
 {
     COOMatrix bcsstk30COO = ReadMatrixFormatToCOO("../data/bcsstk30.mtx");
+    ELLMatrix bcsstk30ELL = COOToELLMatrix(bcsstk30COO);
     return 0;
 
     VKState state = initalizeVulkan();
