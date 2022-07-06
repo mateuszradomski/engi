@@ -1,3 +1,5 @@
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <vulkan/vulkan.h>
 
 #include <stdint.h>
@@ -120,16 +122,16 @@ StringsMatchRaw(char *str1, uint32_t str1Length, char *str2, uint32_t str2Length
 }
 
 static bool
-StringsMatch(StringSlice str1, StringSlice str2)
+StringsMatch(Str str1, Str str2)
 {
     return StringsMatchRaw(str1.bytes, str1.length, str2.bytes, str2.length);
 }
 
 
-static StringSplitIterator
-StringSplit(StringSlice string, char *delim)
+static StrSplitIter
+StringSplit(Str string, char *delim)
 {
-  StringSplitIterator it = { 0 };
+  StrSplitIter it = { 0 };
 
   it.str = string.bytes;
   it.strLength = string.length;
@@ -140,10 +142,10 @@ StringSplit(StringSlice string, char *delim)
   return it;
 }
 
-static StringSlice
-NextInSplit(StringSplitIterator *it)
+static Str
+NextInSplit(StrSplitIter *it)
 {
-  StringSlice result = { 0 };
+  Str result = { 0 };
 
   uint32_t alreadyRead = (uint32_t)(it->head - it->str);
 
@@ -192,10 +194,10 @@ readEntireFile(const char *fileName)
     return result;
 }
 
-static StringSlice
+static Str
 readEntireFileStr(const char *filename)
 {
-    StringSlice result = { 0 };
+    Str result = { 0 };
     Data data = readEntireFile(filename);
 
     result.bytes = (char *)data.bytes;
@@ -245,7 +247,8 @@ findPhysicalDevice(VkInstance instance)
     VkResult ss = vkEnumeratePhysicalDevices(instance, &deviceCount, devicesArray);
     
     // TODO(radomski): Choose the most powerfull GPU
-    VkPhysicalDevice result = devicesArray[1];
+    printf("deviceCount = %u\n", deviceCount);
+    VkPhysicalDevice result = devicesArray[0];
     free(devicesArray);
 
     VkPhysicalDeviceProperties props = { 0 };
@@ -556,7 +559,7 @@ createQueryPool(VkDevice device)
 static VKPipelineDefinition
 createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout)
 {
-    Data spirvData = readEntireFile("shaders/matmul_v2.spv");
+    Data spirvData = readEntireFile("build/shaders/sparse_matmul_v1.spv");
     VkShaderModuleCreateInfo createInfo = { 0 };
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     createInfo.pCode = (uint32_t *)spirvData.bytes;
@@ -739,24 +742,37 @@ printBufferedMatrix(VKState *state, VKBufferAndMemory buffer)
     vkUnmapMemory(state->device, buffer.bufferMemory);
 }
 
+static void
+printBufferedVector(VKState *state, VKBufferAndMemory buffer)
+{
+    void *mappedMemory = NULL;
+    vkMapMemory(state->device, buffer.bufferMemory, 0, buffer.bufferSize, 0, &mappedMemory);
+    float *mappedMemoryFloat = (float *)mappedMemory;
+    for(int i = 0; i < 10; i++) {
+        printf("[%f]", mappedMemoryFloat[i]);
+    }
+    printf("\n");
+    vkUnmapMemory(state->device, buffer.bufferMemory);
+}
+
 static COOMatrix
 ReadMatrixFormatToCOO(const char *filename)
 {
-    StringSlice str = readEntireFileStr(filename);
+    Str str = readEntireFileStr(filename);
     COOMatrix result = { 0 };
 
     bool isSymmetric = false;
 
-    StringSplitIterator lineIter = StringSplit(str, "\r\n");
-    StringSlice line = NextInSplit(&lineIter);
+    StrSplitIter lineIter = StringSplit(str, "\r\n");
+    Str line = NextInSplit(&lineIter);
 
     {
         // First line of the header contains info about encoding
-        StringSplitIterator partIter = StringSplit(line, " ");
-        StringSlice part = { 0 };
+        StrSplitIter partIter = StringSplit(line, " ");
+        Str part = { 0 };
         while((part = NextInSplit(&partIter)).bytes != NULL)
         {
-            StringSlice sym = COMP_STR_TO_STRING_SLICE("symmetric");
+            Str sym = LIT_STR_TO_STRING_SLICE("symmetric");
             if(StringsMatch(part, sym)) {
                 isSymmetric = true;
             }
@@ -772,10 +788,10 @@ ReadMatrixFormatToCOO(const char *filename)
 
     {
         // This line has M x N [element count]
-        StringSplitIterator partIter = StringSplit(line, " ");
-        StringSlice MStr = NextInSplit(&partIter);
-        StringSlice NStr = NextInSplit(&partIter);
-        StringSlice ElementNumStr = NextInSplit(&partIter);
+        StrSplitIter partIter = StringSplit(line, " ");
+        Str MStr = NextInSplit(&partIter);
+        Str NStr = NextInSplit(&partIter);
+        Str ElementNumStr = NextInSplit(&partIter);
         assert(MStr.bytes && NStr.bytes && ElementNumStr.bytes);
 
         uint32_t factor = isSymmetric ? 2 : 1;
@@ -792,10 +808,10 @@ ReadMatrixFormatToCOO(const char *filename)
     uint32_t elementIndex = 0;
     while((line = NextInSplit(&lineIter)).bytes != NULL)
     {
-        StringSplitIterator partIter = StringSplit(line, " ");
-        StringSlice RowStr = NextInSplit(&partIter);
-        StringSlice ColStr = NextInSplit(&partIter);
-        StringSlice ValueStr = NextInSplit(&partIter);
+        StrSplitIter partIter = StringSplit(line, " ");
+        Str RowStr = NextInSplit(&partIter);
+        Str ColStr = NextInSplit(&partIter);
+        Str ValueStr = NextInSplit(&partIter);
         assert(RowStr.bytes && ColStr.bytes && ValueStr.length == 0);
 
         uint32_t row = atoi(RowStr.bytes);
@@ -829,12 +845,14 @@ COOToELLMatrix(COOMatrix matrix)
     uint32_t minRow = INT_MAX;
     uint32_t minCol = INT_MAX;
     uint32_t maxRow = 0;
+    uint32_t maxCol = 0;
 
     for(int i = 0; i < matrix.elementNum; i++)
     {
         minRow = MIN(matrix.row[i], minRow);
         minCol = MIN(matrix.col[i], minCol);
         maxRow = MAX(matrix.row[i], maxRow);
+        maxCol = MAX(matrix.col[i], maxCol);
     }
 
     uint32_t M = maxRow-minRow+1;
@@ -856,8 +874,13 @@ COOToELLMatrix(COOMatrix matrix)
 
     result.P = P;
     result.M = M;
+    result.N = maxCol-minCol+1;
     result.data = malloc(M*P*sizeof(result.data[0]));
     result.columnIndex = malloc(M * P * sizeof(result.columnIndex[0]));
+
+    printf("[ELLMatrix Parse]: Pmax = %u\n", result.P);
+    printf("[ELLMatrix Parse]: M = %u\n", result.M);
+    printf("[ELLMatrix Parse]: N = %u\n", result.N);
     
     memset(result.data, 0, M*P*sizeof(result.data[0]));
     memset(result.columnIndex, 0xff, M*P*sizeof(result.columnIndex[0]));
@@ -870,28 +893,62 @@ COOToELLMatrix(COOMatrix matrix)
         {
             if(result.columnIndex[k] == INVALID_COLUMN) {
                 result.columnIndex[k] = matrix.col[i] - minCol;
+                result.data[k] = matrix.data[i];
+                break;
             }
         }
-
-        PArray[matrix.row[i] - minRow] += 1;
     }
 
     return result;
 }
 
+static void
+ELLMatrixToSSBO(VKState *state, ELLMatrix matrix, VKBufferAndMemory ssbo)
+{
+    void *mappedMemory = NULL;
+    vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+    uint32_t *u32MappedMemory = (uint32_t *)mappedMemory;
+    u32MappedMemory[0] = matrix.M;
+    u32MappedMemory[1] = matrix.P;
+    u32MappedMemory[2] = matrix.N;
+    uint8_t *data = (uint8_t *)(u32MappedMemory + 3);
+    uint32_t MP = matrix.M * matrix.P;
+
+    memcpy(data, matrix.columnIndex, MP * sizeof(matrix.columnIndex[0]));
+    data += MP * sizeof(matrix.columnIndex[0]);
+    memcpy(data, matrix.data, MP * sizeof(matrix.data[0]));
+
+    vkUnmapMemory(state->device, ssbo.bufferMemory);
+}
+
 int main()
 {
-    COOMatrix bcsstk30COO = ReadMatrixFormatToCOO("../data/bcsstk30.mtx");
+    COOMatrix bcsstk30COO = ReadMatrixFormatToCOO("data/bcsstk30.mtx");
     ELLMatrix bcsstk30ELL = COOToELLMatrix(bcsstk30COO);
-    return 0;
 
     VKState state = initalizeVulkan();
 
-    createMatrixBuffers(&state);
+    {
+        VKState *pState = &state;
+        uint32_t matrixSize = 2*bcsstk30ELL.M*bcsstk30ELL.P*sizeof(bcsstk30ELL.data[0])+3*sizeof(uint32_t);
+        uint32_t vectorSize = bcsstk30ELL.N*sizeof(bcsstk30ELL.data[0]);
 
-    // Verify working sgemm
-    fillMatrixWithData(&state, state.matrixABufferAndMemory);
-    fillMatrixWithData(&state, state.matrixBBufferAndMemory);
+        VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+        // Staging buffers
+        pState->matrixABufferAndMemory = createBuffer(pState, matrixSize, usageFlags, memoryFlags);
+        pState->matrixBBufferAndMemory = createBuffer(pState, vectorSize, usageFlags, memoryFlags);
+        pState->matrixCBufferAndMemory = createBuffer(pState, vectorSize, usageFlags, memoryFlags);
+
+        // On device memory buffers
+        pState->matrixADevice = createBuffer(pState, matrixSize, usageFlags, deviceMemoryFlags);
+        pState->matrixBDevice = createBuffer(pState, vectorSize, usageFlags, deviceMemoryFlags);
+        pState->matrixCDevice = createBuffer(pState, vectorSize, usageFlags, deviceMemoryFlags);
+    }
+
+    ELLMatrixToSSBO(&state, bcsstk30ELL, state.matrixABufferAndMemory);
 
     copyStagingBufferToDevice(&state, state.matrixABufferAndMemory, state.matrixADevice);
     copyStagingBufferToDevice(&state, state.matrixBBufferAndMemory, state.matrixBDevice);
@@ -901,6 +958,14 @@ int main()
     createCommandBuffer(&state);
 
     runCommandBuffer(state);
+
+    copyStagingBufferToDevice(&state, state.matrixCDevice, state.matrixCBufferAndMemory);
+    printBufferedVector(&state, state.matrixCBufferAndMemory);
+
+    printf("Returning...\n");
+    return 0;
+
+    createMatrixBuffers(&state);
 
     #if 0
     copyStagingBufferToDevice(&state, state.matrixADevice, state.matrixABufferAndMemory);

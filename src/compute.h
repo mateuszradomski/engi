@@ -9,19 +9,19 @@ typedef struct Data
     uint32_t length;
 } Data;
 
-typedef struct StringSlice
+typedef struct Str
 {
     char *bytes;
     uint32_t length;
-} StringSlice;
+} Str;
 
-#define COMP_STR_TO_STRING_SLICE(str) { .bytes = str, .length = sizeof(str) - 1 }
+#define LIT_STR_TO_STRING_SLICE(str) { .bytes = str, .length = sizeof(str) - 1 }
 
-typedef struct StringSplitIterator
+typedef struct StrSplitIter
 {
     char *str, *head, *delim;
     uint32_t strLength, delimLength;
-} StringSplitIterator;
+} StrSplitIter;
 
 typedef struct COOMatrix
 {
@@ -35,7 +35,7 @@ typedef struct COOMatrix
 typedef struct ELLMatrix
 {
     float *data;
-    uint32_t M, P, *columnIndex;
+    uint32_t M, P, N, *columnIndex;
 } ELLMatrix;
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))

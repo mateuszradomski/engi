@@ -12,8 +12,10 @@ glslc.exe -O ..\..\shaders\matmul_v3.comp -o matmul_v3.spv
 glslc.exe -O ..\..\shaders\sparse_matmul_v1.comp -o sparse_matmul_v1.spv
 popd
 
+@REM -fsanitize=address ^
+
 clang ..\src\compute.c -std=c11 -o compute.exe ^
--g -Og ^
+-g ^
 -IC:\clibs\glfw-3.3.4\include ^
 -IC:\VulkanSDK\1.2.182.0\Include ^
 C:\clibs\glfw-3.3.4\lib-mingw-w64\libglfw3.a ^
