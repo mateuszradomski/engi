@@ -23,6 +23,12 @@ typedef struct StrSplitIter
     uint32_t strLength, delimLength;
 } StrSplitIter;
 
+typedef struct Vector
+{
+    float *data;
+    uint32_t len;
+} Vector;
+
 typedef struct COOMatrix
 {
     float *data;

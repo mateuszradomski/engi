@@ -11,9 +11,9 @@
 #include <time.h>
 
 #include "compute.h"
+#include "expVector.h"
 
-#define MATRIX_SIZE 4096
-#define WORKGROUP_SIZE 8
+#define WORKGROUP_SIZE 28
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
@@ -46,14 +46,14 @@ typedef struct VKState
     VkQueue computeQueue;
     uint32_t computeQueueFamilyIndex;
 
-    uint32_t matrixASize;
-    VKBufferAndMemory matrixABufferAndMemory;
-    VKBufferAndMemory matrixBBufferAndMemory;
-    VKBufferAndMemory matrixCBufferAndMemory;
+    uint32_t matrixSize;
+    VKBufferAndMemory matrixBufferAndMemory;
+    VKBufferAndMemory inVecBufferAndMemory;
+    VKBufferAndMemory outVecBufferAndMemory;
 
-    VKBufferAndMemory matrixADevice;
-    VKBufferAndMemory matrixBDevice;
-    VKBufferAndMemory matrixCDevice;
+    VKBufferAndMemory matrixDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSet;
@@ -374,23 +374,23 @@ createBuffer(VKState *state, uint32_t bufferSize, VkBufferUsageFlags usageFlags,
 
 static void
 bindDescriptorSetWithBuffers(VKState *state,
-                             VKBufferAndMemory matrixA,
-                             VKBufferAndMemory matrixB,
-                             VKBufferAndMemory matrixC)
+                             VKBufferAndMemory matrix,
+                             VKBufferAndMemory inVec,
+                             VKBufferAndMemory outVec)
 {
     // Bind buffer with descriptor set
     VkDescriptorBufferInfo descriptorBufferInfoArray[3] = { 0 };
-    descriptorBufferInfoArray[0].buffer = matrixA.buffer;
+    descriptorBufferInfoArray[0].buffer = matrix.buffer;
     descriptorBufferInfoArray[0].offset = 0;
-    descriptorBufferInfoArray[0].range = matrixA.bufferSize;
+    descriptorBufferInfoArray[0].range = matrix.bufferSize;
 
-    descriptorBufferInfoArray[1].buffer = matrixB.buffer;
+    descriptorBufferInfoArray[1].buffer = inVec.buffer;
     descriptorBufferInfoArray[1].offset = 0;
-    descriptorBufferInfoArray[1].range = matrixB.bufferSize;
+    descriptorBufferInfoArray[1].range = inVec.bufferSize;
 
-    descriptorBufferInfoArray[2].buffer = matrixC.buffer;
+    descriptorBufferInfoArray[2].buffer = outVec.buffer;
     descriptorBufferInfoArray[2].offset = 0;
-    descriptorBufferInfoArray[2].range = matrixC.bufferSize;
+    descriptorBufferInfoArray[2].range = outVec.bufferSize;
 
     VkWriteDescriptorSet writeDescriptorSetsArray[3] = { 0 };
     writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -415,28 +415,6 @@ bindDescriptorSetWithBuffers(VKState *state,
     writeDescriptorSetsArray[2].pBufferInfo = &descriptorBufferInfoArray[2];
 
     vkUpdateDescriptorSets(state->device, ARRAY_LEN(writeDescriptorSetsArray), writeDescriptorSetsArray, 0, NULL);
-}
-
-static void
-createMatrixBuffers(VKState *state)
-{
-    uint32_t matrixASize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
-    uint32_t matrixBSize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
-    uint32_t matrixCSize = MATRIX_SIZE * MATRIX_SIZE * sizeof(float);
-
-    VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-    // Staging buffers
-    state->matrixABufferAndMemory = createBuffer(state, matrixASize, usageFlags, memoryFlags);
-    state->matrixBBufferAndMemory = createBuffer(state, matrixBSize, usageFlags, memoryFlags);
-    state->matrixCBufferAndMemory = createBuffer(state, matrixCSize, usageFlags, memoryFlags);
-
-    // On device memory buffers 
-    state->matrixADevice = createBuffer(state, matrixASize, usageFlags, deviceMemoryFlags);
-    state->matrixBDevice = createBuffer(state, matrixBSize, usageFlags, deviceMemoryFlags);
-    state->matrixCDevice = createBuffer(state, matrixCSize, usageFlags, deviceMemoryFlags);
 }
 
 static void
@@ -625,8 +603,8 @@ createCommandBuffer(VKState *state)
     vkCmdWriteTimestamp(state->commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, state->queryPool, 0);
 
     vkCmdDispatch(state->commandBuffer,
-                  MATRIX_SIZE / WORKGROUP_SIZE, // how many workgroups to dispatch in X
-                  MATRIX_SIZE / WORKGROUP_SIZE, // how many workgroups to dispatch in Y
+                  28924 / WORKGROUP_SIZE, // how many workgroups to dispatch in X
+                  1, // how many workgroups to dispatch in Y
                   1);
 
     vkCmdWriteTimestamp(state->commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, state->queryPool, 1);
@@ -694,29 +672,12 @@ runCommandBuffer(VKState instance)
         VK_CALL(vkGetQueryPoolResults(instance.device, instance.queryPool,
                                                0, 2, sizeof(uint64_t) * 2, ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
         double execTime = (ts[1] - ts[0]) / 1e9;
-        double gflops = ((2 * pow(MATRIX_SIZE, 3)) / execTime) / 1e9;
+        //double gflops = ((2 * pow(MATRIX_SIZE, 3)) / execTime) / 1e9;
+        double gflops = 0.0;
         printf("%fs[%f] [%f GFLOPS]\n", execTime, t2-t1, gflops);
 
         vkDestroyFence(instance.device, fence, NULL);
     }
-}
-
-static void
-fillMatrixWithData(VKState *state, VKBufferAndMemory buffer)
-{
-    void *mappedMemory = NULL;
-    vkMapMemory(state->device, buffer.bufferMemory, 0, buffer.bufferSize, 0, &mappedMemory);
-    float *floatMappedMemory = mappedMemory;
-
-    for (int row = 0; row < MATRIX_SIZE; row++)
-    {
-        for (int col = 0; col < MATRIX_SIZE; col++)
-        {
-            floatMappedMemory[row * MATRIX_SIZE + col] = randomUnilateral();
-        }
-    }
-
-    vkUnmapMemory(state->device, buffer.bufferMemory);
 }
 
 static void
@@ -731,15 +692,6 @@ printMatrix(float *data, uint32_t matrixSize)
 
         printf("\n");
     }
-}
-
-static void
-printBufferedMatrix(VKState *state, VKBufferAndMemory buffer)
-{
-    void *mappedMemory = NULL;
-    vkMapMemory(state->device, buffer.bufferMemory, 0, buffer.bufferSize, 0, &mappedMemory);
-    printMatrix((float *)mappedMemory, MATRIX_SIZE);
-    vkUnmapMemory(state->device, buffer.bufferMemory);
 }
 
 static void
@@ -902,6 +854,20 @@ COOToELLMatrix(COOMatrix matrix)
     return result;
 }
 
+static Vector
+getSetVector(float v, uint32_t len)
+{
+    Vector res = { 0 };
+
+    res.len = len;
+    res.data = malloc(res.len * sizeof(res.data[0]));
+    for(int i = 0; i < res.len; i++) {
+        res.data[i] = v;
+    }
+
+    return res;
+}
+
 static void
 ELLMatrixToSSBO(VKState *state, ELLMatrix matrix, VKBufferAndMemory ssbo)
 {
@@ -921,6 +887,30 @@ ELLMatrixToSSBO(VKState *state, ELLMatrix matrix, VKBufferAndMemory ssbo)
     vkUnmapMemory(state->device, ssbo.bufferMemory);
 }
 
+static void
+InVecToSSBO(VKState *state, Vector vec, VKBufferAndMemory ssbo)
+{
+    void *mappedMemory = NULL;
+    vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+    memcpy(mappedMemory, vec.data, vec.len * sizeof(vec.data[0]));
+    vkUnmapMemory(state->device, ssbo.bufferMemory);
+}
+
+static void
+checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, const float *expected, uint32_t len)
+{
+    void *mappedMemory = NULL;
+    vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+    float *mappedMemoryFloat = (float *)mappedMemory;
+    for(uint32_t i = 0; i < len; i++)
+    {
+        assert(mappedMemoryFloat[i] == expected[i]);
+    }
+    vkUnmapMemory(state->device, ssbo.bufferMemory);
+
+    printf("[Vector match check]: Pass!\n");
+}
+
 int main()
 {
     COOMatrix bcsstk30COO = ReadMatrixFormatToCOO("data/bcsstk30.mtx");
@@ -938,52 +928,31 @@ int main()
         VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
         // Staging buffers
-        pState->matrixABufferAndMemory = createBuffer(pState, matrixSize, usageFlags, memoryFlags);
-        pState->matrixBBufferAndMemory = createBuffer(pState, vectorSize, usageFlags, memoryFlags);
-        pState->matrixCBufferAndMemory = createBuffer(pState, vectorSize, usageFlags, memoryFlags);
+        pState->matrixBufferAndMemory = createBuffer(pState, matrixSize, usageFlags, memoryFlags);
+        pState->inVecBufferAndMemory = createBuffer(pState, vectorSize, usageFlags, memoryFlags);
+        pState->outVecBufferAndMemory = createBuffer(pState, vectorSize, usageFlags, memoryFlags);
 
         // On device memory buffers
-        pState->matrixADevice = createBuffer(pState, matrixSize, usageFlags, deviceMemoryFlags);
-        pState->matrixBDevice = createBuffer(pState, vectorSize, usageFlags, deviceMemoryFlags);
-        pState->matrixCDevice = createBuffer(pState, vectorSize, usageFlags, deviceMemoryFlags);
+        pState->matrixDevice = createBuffer(pState, matrixSize, usageFlags, deviceMemoryFlags);
+        pState->inVecDevice = createBuffer(pState, vectorSize, usageFlags, deviceMemoryFlags);
+        pState->outVecDevice = createBuffer(pState, vectorSize, usageFlags, deviceMemoryFlags);
     }
 
-    ELLMatrixToSSBO(&state, bcsstk30ELL, state.matrixABufferAndMemory);
+    ELLMatrixToSSBO(&state, bcsstk30ELL, state.matrixBufferAndMemory);
+    InVecToSSBO(&state, getSetVector(1.0, bcsstk30ELL.N), state.inVecBufferAndMemory);
 
-    copyStagingBufferToDevice(&state, state.matrixABufferAndMemory, state.matrixADevice);
-    copyStagingBufferToDevice(&state, state.matrixBBufferAndMemory, state.matrixBDevice);
-    copyStagingBufferToDevice(&state, state.matrixCBufferAndMemory, state.matrixCDevice);
+    copyStagingBufferToDevice(&state, state.matrixBufferAndMemory, state.matrixDevice);
+    copyStagingBufferToDevice(&state, state.inVecBufferAndMemory, state.inVecDevice);
+    copyStagingBufferToDevice(&state, state.outVecBufferAndMemory, state.outVecDevice);
 
-    bindDescriptorSetWithBuffers(&state, state.matrixADevice, state.matrixBDevice, state.matrixCDevice);
+    bindDescriptorSetWithBuffers(&state, state.matrixDevice, state.inVecDevice, state.outVecDevice);
     createCommandBuffer(&state);
 
     runCommandBuffer(state);
 
-    copyStagingBufferToDevice(&state, state.matrixCDevice, state.matrixCBufferAndMemory);
-    printBufferedVector(&state, state.matrixCBufferAndMemory);
-
-    printf("Returning...\n");
-    return 0;
-
-    createMatrixBuffers(&state);
-
-    #if 0
-    copyStagingBufferToDevice(&state, state.matrixADevice, state.matrixABufferAndMemory);
-    copyStagingBufferToDevice(&state, state.matrixBDevice, state.matrixBBufferAndMemory);
-    copyStagingBufferToDevice(&state, state.matrixCDevice, state.matrixCBufferAndMemory);
-
-    printf("Matrix A ***********\n");
-    printBufferedMatrix(&state, state.matrixABufferAndMemory);
-    printf("********************\n");
-
-    printf("Matrix B ***********\n");
-    printBufferedMatrix(&state, state.matrixBBufferAndMemory);
-    printf("********************\n");
-
-    printf("Matrix C ***********\n");
-    printBufferedMatrix(&state, state.matrixCBufferAndMemory);
-    printf("********************\n");
-    #endif
+    copyStagingBufferToDevice(&state, state.outVecDevice, state.outVecBufferAndMemory);
+    printBufferedVector(&state, state.outVecBufferAndMemory);
+    checkIfVectorIsSame(&state, state.outVecBufferAndMemory, expectedVector, bcsstk30ELL.N);
 
     return 0;
 }
