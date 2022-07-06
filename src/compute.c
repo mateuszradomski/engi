@@ -672,8 +672,7 @@ runCommandBuffer(VKState instance)
         VK_CALL(vkGetQueryPoolResults(instance.device, instance.queryPool,
                                                0, 2, sizeof(uint64_t) * 2, ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
         double execTime = (ts[1] - ts[0]) / 1e9;
-        //double gflops = ((2 * pow(MATRIX_SIZE, 3)) / execTime) / 1e9;
-        double gflops = 0.0;
+        double gflops = ((2 * pow(28924, 2)) / execTime) / 1e9;
         printf("%fs[%f] [%f GFLOPS]\n", execTime, t2-t1, gflops);
 
         vkDestroyFence(instance.device, fence, NULL);
