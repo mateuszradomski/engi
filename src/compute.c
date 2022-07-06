@@ -648,7 +648,7 @@ initalizeVulkan()
     return result;
 }
 
-static void
+static double
 runCommandBuffer(VKState instance)
 {
     VkSubmitInfo submitInfo = {0};
@@ -661,22 +661,16 @@ runCommandBuffer(VKState instance)
     fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceCreateInfo.flags = 0;
 
-    for(int i = 0; i < 3; i++)
-    {
-        VK_CALL(vkCreateFence(instance.device, &fenceCreateInfo, NULL, &fence));
-        double t1 = getWallTime();
-        VK_CALL(vkQueueSubmit(instance.computeQueue, 1, &submitInfo, fence));
-        VK_CALL(vkWaitForFences(instance.device, 1, &fence, VK_TRUE, 100000000000));
-        double t2 = getWallTime();
-        uint64_t ts[2];
-        VK_CALL(vkGetQueryPoolResults(instance.device, instance.queryPool,
-                                               0, 2, sizeof(uint64_t) * 2, ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
-        double execTime = (ts[1] - ts[0]) / 1e9;
-        double gflops = ((2 * pow(28924, 2)) / execTime) / 1e9;
-        printf("%fs[%f] [%f GFLOPS]\n", execTime, t2-t1, gflops);
+    VK_CALL(vkCreateFence(instance.device, &fenceCreateInfo, NULL, &fence));
+    VK_CALL(vkQueueSubmit(instance.computeQueue, 1, &submitInfo, fence));
+    VK_CALL(vkWaitForFences(instance.device, 1, &fence, VK_TRUE, 100000000000));
+    uint64_t ts[2];
+    VK_CALL(vkGetQueryPoolResults(instance.device, instance.queryPool,
+                                           0, 2, sizeof(uint64_t) * 2, ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
+    vkDestroyFence(instance.device, fence, NULL);
 
-        vkDestroyFence(instance.device, fence, NULL);
-    }
+    double execTime = (ts[1] - ts[0]) / 1e9;
+    return execTime;
 }
 
 static void
@@ -950,7 +944,10 @@ int main()
     bindDescriptorSetWithBuffers(&state, state.matrixDevice, state.inVecDevice, state.outVecDevice);
     createCommandBuffer(&state);
 
-    runCommandBuffer(state);
+    uint32_t nonZeroCount = bcsstk30COO.elementNum;
+    double execTime = runCommandBuffer(state);
+    double gflops = ((2 * nonZeroCount) / execTime) / 1e9;
+    printf("%fs [%f GFLOPS]\n", execTime, gflops);
 
     copyStagingBufferToDevice(&state, state.outVecDevice, state.outVecBufferAndMemory);
     printBufferedVector(&state, state.outVecBufferAndMemory);

@@ -29,13 +29,15 @@ layout(set = 0, binding = 2) buffer outputVector
 void main()
 {
     const uint rowi = gl_GlobalInvocationID.x;
+
     if(rowi < M) { 
+        const uint rowOffset = rowi * P;
         const uint floatDataOffset = M * P;
 
         float sum = 0.0;
         for(uint coli = 0; coli < P; coli++)
         {
-            uint cellOffset = rowi * P + coli;
+            const uint cellOffset = rowOffset + coli;
             if(data[cellOffset] == 0xffffffff) {
                 break;
             }
