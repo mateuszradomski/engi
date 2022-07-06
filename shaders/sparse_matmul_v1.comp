@@ -1,7 +1,7 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-#define WORKGROUP_SIZE 28
+#define WORKGROUP_SIZE 32
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1) in;
 
 layout(set = 0, binding = 0) buffer bufA
@@ -29,18 +29,20 @@ layout(set = 0, binding = 2) buffer outputVector
 void main()
 {
     const uint rowi = gl_GlobalInvocationID.x;
-    const uint floatDataOffset = M * P;
+    if(rowi < M) { 
+        const uint floatDataOffset = M * P;
 
-    float sum = 0.0;
-    for(uint coli = 0; coli < P; coli++)
-    {
-        uint cellOffset = rowi * P + coli;
-        if(data[cellOffset] == 0xffffffff) {
-            break;
+        float sum = 0.0;
+        for(uint coli = 0; coli < P; coli++)
+        {
+            uint cellOffset = rowi * P + coli;
+            if(data[cellOffset] == 0xffffffff) {
+                break;
+            }
+
+            sum += inVec[data[cellOffset]] * floatdata[floatDataOffset + cellOffset];
         }
 
-        sum += inVec[data[cellOffset]] * floatdata[floatDataOffset + cellOffset];
+        outVec[rowi] = sum;
     }
-
-    outVec[rowi] = sum;
 }

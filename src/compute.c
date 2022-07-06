@@ -13,7 +13,7 @@
 #include "compute.h"
 #include "expVector.h"
 
-#define WORKGROUP_SIZE 28
+#define WORKGROUP_SIZE 32
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
@@ -603,7 +603,7 @@ createCommandBuffer(VKState *state)
     vkCmdWriteTimestamp(state->commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, state->queryPool, 0);
 
     vkCmdDispatch(state->commandBuffer,
-                  28924 / WORKGROUP_SIZE, // how many workgroups to dispatch in X
+                  DIV_CEIL(28924, WORKGROUP_SIZE), // how many workgroups to dispatch in X
                   1, // how many workgroups to dispatch in Y
                   1);
 
@@ -904,7 +904,10 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, const float *expecte
     float *mappedMemoryFloat = (float *)mappedMemory;
     for(uint32_t i = 0; i < len; i++)
     {
-        assert(mappedMemoryFloat[i] == expected[i]);
+        if(mappedMemoryFloat[i] != expected[i]) {
+            printf("i, lhs == rhs | %d, %f == %f\n", i, mappedMemoryFloat[i], expected[i]);
+            assert(mappedMemoryFloat[i] == expected[i]);
+        }
     }
     vkUnmapMemory(state->device, ssbo.bufferMemory);
 

@@ -47,4 +47,6 @@ typedef struct ELLMatrix
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
+#define DIV_CEIL(a, b) ((a + b - 1) / b)
+
 #endif
