@@ -42,6 +42,7 @@ typedef struct ELLMatrix
 {
     float *data;
     uint32_t M, P, N, *columnIndex;
+    uint32_t elementNum;
 } ELLMatrix;
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))

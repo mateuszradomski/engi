@@ -649,25 +649,25 @@ initalizeVulkan()
 }
 
 static double
-runCommandBuffer(VKState instance)
+runCommandBuffer(VKState *instance)
 {
     VkSubmitInfo submitInfo = {0};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &instance.commandBuffer;
+    submitInfo.pCommandBuffers = &instance->commandBuffer;
 
     VkFence fence;
     VkFenceCreateInfo fenceCreateInfo = {0};
     fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceCreateInfo.flags = 0;
 
-    VK_CALL(vkCreateFence(instance.device, &fenceCreateInfo, NULL, &fence));
-    VK_CALL(vkQueueSubmit(instance.computeQueue, 1, &submitInfo, fence));
-    VK_CALL(vkWaitForFences(instance.device, 1, &fence, VK_TRUE, 100000000000));
+    VK_CALL(vkCreateFence(instance->device, &fenceCreateInfo, NULL, &fence));
+    VK_CALL(vkQueueSubmit(instance->computeQueue, 1, &submitInfo, fence));
+    VK_CALL(vkWaitForFences(instance->device, 1, &fence, VK_TRUE, 100000000000));
     uint64_t ts[2];
-    VK_CALL(vkGetQueryPoolResults(instance.device, instance.queryPool,
+    VK_CALL(vkGetQueryPoolResults(instance->device, instance->queryPool,
                                            0, 2, sizeof(uint64_t) * 2, ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
-    vkDestroyFence(instance.device, fence, NULL);
+    vkDestroyFence(instance->device, fence, NULL);
 
     double execTime = (ts[1] - ts[0]) / 1e9;
     return execTime;
@@ -822,6 +822,7 @@ COOToELLMatrix(COOMatrix matrix)
     result.N = maxCol-minCol+1;
     result.data = malloc(M*P*sizeof(result.data[0]));
     result.columnIndex = malloc(M * P * sizeof(result.columnIndex[0]));
+    result.elementNum = matrix.elementNum;
 
     printf("[ELLMatrix Parse]: Pmax = %u\n", result.P);
     printf("[ELLMatrix Parse]: M = %u\n", result.M);
@@ -862,20 +863,20 @@ getSetVector(float v, uint32_t len)
 }
 
 static void
-ELLMatrixToSSBO(VKState *state, ELLMatrix matrix, VKBufferAndMemory ssbo)
+ELLMatrixToSSBO(VKState *state, ELLMatrix *matrix, VKBufferAndMemory ssbo)
 {
     void *mappedMemory = NULL;
     vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
     uint32_t *u32MappedMemory = (uint32_t *)mappedMemory;
-    u32MappedMemory[0] = matrix.M;
-    u32MappedMemory[1] = matrix.P;
-    u32MappedMemory[2] = matrix.N;
+    u32MappedMemory[0] = matrix->M;
+    u32MappedMemory[1] = matrix->P;
+    u32MappedMemory[2] = matrix->N;
     uint8_t *data = (uint8_t *)(u32MappedMemory + 3);
-    uint32_t MP = matrix.M * matrix.P;
+    uint32_t MP = matrix->M * matrix->P;
 
-    memcpy(data, matrix.columnIndex, MP * sizeof(matrix.columnIndex[0]));
-    data += MP * sizeof(matrix.columnIndex[0]);
-    memcpy(data, matrix.data, MP * sizeof(matrix.data[0]));
+    memcpy(data, matrix->columnIndex, MP * sizeof(matrix->columnIndex[0]));
+    data += MP * sizeof(matrix->columnIndex[0]);
+    memcpy(data, matrix->data, MP * sizeof(matrix->data[0]));
 
     vkUnmapMemory(state->device, ssbo.bufferMemory);
 }
@@ -907,6 +908,48 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, const float *expecte
     printf("[Vector match check]: Pass!\n");
 }
 
+static void
+runVersionA(VKState *state, ELLMatrix *matrix)
+{
+    {
+        uint32_t matrixSize = 2*matrix->M*matrix->P*sizeof(matrix->data[0])+3*sizeof(uint32_t);
+        uint32_t vectorSize = matrix->N*sizeof(matrix->data[0]);
+
+        VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+        // Staging buffers
+        state->matrixBufferAndMemory = createBuffer(state, matrixSize, usageFlags, memoryFlags);
+        state->inVecBufferAndMemory = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+        state->outVecBufferAndMemory = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+
+        // On device memory buffers
+        state->matrixDevice = createBuffer(state, matrixSize, usageFlags, deviceMemoryFlags);
+        state->inVecDevice = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
+        state->outVecDevice = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
+    }
+
+    ELLMatrixToSSBO(state, matrix, state->matrixBufferAndMemory);
+    InVecToSSBO(state, getSetVector(1.0, matrix->N), state->inVecBufferAndMemory);
+
+    copyStagingBufferToDevice(state, state->matrixBufferAndMemory, state->matrixDevice);
+    copyStagingBufferToDevice(state, state->inVecBufferAndMemory, state->inVecDevice);
+    copyStagingBufferToDevice(state, state->outVecBufferAndMemory, state->outVecDevice);
+
+    bindDescriptorSetWithBuffers(state, state->matrixDevice, state->inVecDevice, state->outVecDevice);
+    createCommandBuffer(state);
+
+    uint32_t nonZeroCount = matrix->elementNum;
+    double execTime = runCommandBuffer(state);
+    double gflops = ((2 * nonZeroCount) / execTime) / 1e9;
+    printf("%fs [%f GFLOPS]\n", execTime, gflops);
+
+    copyStagingBufferToDevice(state, state->outVecDevice, state->outVecBufferAndMemory);
+    printBufferedVector(state, state->outVecBufferAndMemory);
+    checkIfVectorIsSame(state, state->outVecBufferAndMemory, expectedVector, matrix->N);
+}
+
 int main()
 {
     COOMatrix bcsstk30COO = ReadMatrixFormatToCOO("data/bcsstk30.mtx");
@@ -914,44 +957,7 @@ int main()
 
     VKState state = initalizeVulkan();
 
-    {
-        VKState *pState = &state;
-        uint32_t matrixSize = 2*bcsstk30ELL.M*bcsstk30ELL.P*sizeof(bcsstk30ELL.data[0])+3*sizeof(uint32_t);
-        uint32_t vectorSize = bcsstk30ELL.N*sizeof(bcsstk30ELL.data[0]);
-
-        VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-        VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-        // Staging buffers
-        pState->matrixBufferAndMemory = createBuffer(pState, matrixSize, usageFlags, memoryFlags);
-        pState->inVecBufferAndMemory = createBuffer(pState, vectorSize, usageFlags, memoryFlags);
-        pState->outVecBufferAndMemory = createBuffer(pState, vectorSize, usageFlags, memoryFlags);
-
-        // On device memory buffers
-        pState->matrixDevice = createBuffer(pState, matrixSize, usageFlags, deviceMemoryFlags);
-        pState->inVecDevice = createBuffer(pState, vectorSize, usageFlags, deviceMemoryFlags);
-        pState->outVecDevice = createBuffer(pState, vectorSize, usageFlags, deviceMemoryFlags);
-    }
-
-    ELLMatrixToSSBO(&state, bcsstk30ELL, state.matrixBufferAndMemory);
-    InVecToSSBO(&state, getSetVector(1.0, bcsstk30ELL.N), state.inVecBufferAndMemory);
-
-    copyStagingBufferToDevice(&state, state.matrixBufferAndMemory, state.matrixDevice);
-    copyStagingBufferToDevice(&state, state.inVecBufferAndMemory, state.inVecDevice);
-    copyStagingBufferToDevice(&state, state.outVecBufferAndMemory, state.outVecDevice);
-
-    bindDescriptorSetWithBuffers(&state, state.matrixDevice, state.inVecDevice, state.outVecDevice);
-    createCommandBuffer(&state);
-
-    uint32_t nonZeroCount = bcsstk30COO.elementNum;
-    double execTime = runCommandBuffer(state);
-    double gflops = ((2 * nonZeroCount) / execTime) / 1e9;
-    printf("%fs [%f GFLOPS]\n", execTime, gflops);
-
-    copyStagingBufferToDevice(&state, state.outVecDevice, state.outVecBufferAndMemory);
-    printBufferedVector(&state, state.outVecBufferAndMemory);
-    checkIfVectorIsSame(&state, state.outVecBufferAndMemory, expectedVector, bcsstk30ELL.N);
+    runVersionA(&state, &bcsstk30ELL);
 
     return 0;
 }
