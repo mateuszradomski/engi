@@ -46,16 +46,16 @@ typedef struct VKState
     VkQueue computeQueue;
     uint32_t computeQueueFamilyIndex;
 
-    VkDescriptorSetLayout descriptorSetLayout;
-    VkDescriptorPool descriptorPool;
-    VkDescriptorSet descriptorSet;
     VkQueryPool queryPool;
-    VKPipelineDefinition pipelineDefinition;
     VkCommandPool commandPool;
 } VKState;
 
 typedef struct VersionA
 {
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
     VKBufferAndMemory matrixBufferAndMemory;
     VKBufferAndMemory inVecBufferAndMemory;
     VKBufferAndMemory outVecBufferAndMemory;
@@ -64,6 +64,7 @@ typedef struct VersionA
     VKBufferAndMemory inVecDevice;
     VKBufferAndMemory outVecDevice;
 
+    VKPipelineDefinition pipelineDefinition;
     VkCommandBuffer commandBuffer;
 } VersionA;
 
@@ -376,42 +377,39 @@ createBuffer(VKState *state, uint32_t bufferSize, VkBufferUsageFlags usageFlags,
 }
 
 static void
-bindDescriptorSetWithBuffers(VKState *state,
-                             VKBufferAndMemory matrix,
-                             VKBufferAndMemory inVec,
-                             VKBufferAndMemory outVec)
+bindVersionADescriptorSetWithBuffers(VKState *state, VersionA *versionA)
 {
     // Bind buffer with descriptor set
     VkDescriptorBufferInfo descriptorBufferInfoArray[3] = { 0 };
-    descriptorBufferInfoArray[0].buffer = matrix.buffer;
+    descriptorBufferInfoArray[0].buffer = versionA->matrixDevice.buffer;
     descriptorBufferInfoArray[0].offset = 0;
-    descriptorBufferInfoArray[0].range = matrix.bufferSize;
+    descriptorBufferInfoArray[0].range = versionA->matrixDevice.bufferSize;
 
-    descriptorBufferInfoArray[1].buffer = inVec.buffer;
+    descriptorBufferInfoArray[1].buffer = versionA->inVecDevice.buffer;
     descriptorBufferInfoArray[1].offset = 0;
-    descriptorBufferInfoArray[1].range = inVec.bufferSize;
+    descriptorBufferInfoArray[1].range = versionA->inVecDevice.bufferSize;
 
-    descriptorBufferInfoArray[2].buffer = outVec.buffer;
+    descriptorBufferInfoArray[2].buffer = versionA->outVecDevice.buffer;
     descriptorBufferInfoArray[2].offset = 0;
-    descriptorBufferInfoArray[2].range = outVec.bufferSize;
+    descriptorBufferInfoArray[2].range = versionA->outVecDevice.bufferSize;
 
     VkWriteDescriptorSet writeDescriptorSetsArray[3] = { 0 };
     writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[0].dstSet = state->descriptorSet;
+    writeDescriptorSetsArray[0].dstSet = versionA->descriptorSet;
     writeDescriptorSetsArray[0].dstBinding = 0;
     writeDescriptorSetsArray[0].descriptorCount = 1;
     writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
 
     writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[1].dstSet = state->descriptorSet;
+    writeDescriptorSetsArray[1].dstSet = versionA->descriptorSet;
     writeDescriptorSetsArray[1].dstBinding = 1;
     writeDescriptorSetsArray[1].descriptorCount = 1;
     writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
 
     writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[2].dstSet = state->descriptorSet;
+    writeDescriptorSetsArray[2].dstSet = versionA->descriptorSet;
     writeDescriptorSetsArray[2].dstBinding = 2;
     writeDescriptorSetsArray[2].descriptorCount = 1;
     writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -578,7 +576,8 @@ createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout
 }
 
 static VkCommandBuffer
-createCommandBuffer(VKState *state, uint32_t dispatchX, uint32_t dispatchY, uint32_t dispatchZ)
+createCommandBuffer(VKState *state, VKPipelineDefinition *pipelineDefinition, VkDescriptorSet *descriptorSet,
+                    uint32_t dispatchX, uint32_t dispatchY, uint32_t dispatchZ)
 {
     VkCommandBuffer result = { 0 };
 
@@ -601,8 +600,8 @@ createCommandBuffer(VKState *state, uint32_t dispatchX, uint32_t dispatchY, uint
         .pInheritanceInfo = NULL,
     };
 
-    vkCmdBindPipeline(result, VK_PIPELINE_BIND_POINT_COMPUTE, state->pipelineDefinition.pipeline);
-    vkCmdBindDescriptorSets(result, VK_PIPELINE_BIND_POINT_COMPUTE, state->pipelineDefinition.pipelineLayout, 0, 1, &state->descriptorSet, 0, NULL);
+    vkCmdBindPipeline(result, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineDefinition->pipeline);
+    vkCmdBindDescriptorSets(result, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineDefinition->pipelineLayout, 0, 1, descriptorSet, 0, NULL);
 
     vkCmdResetQueryPool(result, state->queryPool, 0, 1);
     vkCmdWriteTimestamp(result, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, state->queryPool, 0);
@@ -624,18 +623,11 @@ initalizeVulkan()
     VkPhysicalDevice phyDevice = findPhysicalDevice(instance);
     VKDeviceAndComputeQueue deviceAndQueue = createDevice(phyDevice);
 
-    VkDescriptorSetLayout descriptorSetLayout = createDescriptorSetLayout(deviceAndQueue.device);
-    VkDescriptorPool descriptorPool = createDescriptorPool(deviceAndQueue.device);
-    VkDescriptorSet descriptorSet = createDescriptorSet(deviceAndQueue.device, descriptorSetLayout, descriptorPool);
-
     result.instance = instance;
     result.phyDevice = phyDevice;
     result.device = deviceAndQueue.device;
     result.computeQueue = deviceAndQueue.computeQueue;
     result.computeQueueFamilyIndex = deviceAndQueue.computeQueueFamilyIndex;
-    result.descriptorSetLayout = descriptorSetLayout;
-    result.descriptorPool = descriptorPool;
-    result.descriptorSet = descriptorSet;
 
     VkCommandPoolCreateInfo commandPoolCreateInfo = { 0 };
     commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -643,11 +635,7 @@ initalizeVulkan()
     commandPoolCreateInfo.queueFamilyIndex = result.computeQueueFamilyIndex;
     VK_CALL(vkCreateCommandPool(result.device, &commandPoolCreateInfo, NULL, &result.commandPool));
 
-    VkQueryPool queryPool = createQueryPool(deviceAndQueue.device);
-    VKPipelineDefinition pipelineDefinition = createComputePipeline(deviceAndQueue.device, descriptorSetLayout);
-
-    result.queryPool = queryPool;
-    result.pipelineDefinition = pipelineDefinition;
+    result.queryPool = createQueryPool(deviceAndQueue.device);
 
     return result;
 }
@@ -917,6 +905,10 @@ runVersionA(VKState *state, ELLMatrix *matrix)
 {
     VersionA ver = { };
 
+    ver.descriptorSetLayout = createDescriptorSetLayout(state->device);
+    ver.descriptorPool = createDescriptorPool(state->device);
+    ver.descriptorSet = createDescriptorSet(state->device, ver.descriptorSetLayout, ver.descriptorPool);
+
     uint32_t matrixSize = 2*matrix->M*matrix->P*sizeof(matrix->data[0])+3*sizeof(uint32_t);
     uint32_t vectorSize = matrix->N*sizeof(matrix->data[0]);
 
@@ -941,11 +933,14 @@ runVersionA(VKState *state, ELLMatrix *matrix)
     copyStagingBufferToDevice(state, ver.inVecBufferAndMemory, ver.inVecDevice);
     copyStagingBufferToDevice(state, ver.outVecBufferAndMemory, ver.outVecDevice);
 
-    bindDescriptorSetWithBuffers(state, ver.matrixDevice, ver.inVecDevice, ver.outVecDevice);
+    bindVersionADescriptorSetWithBuffers(state, &ver);
+    ver.pipelineDefinition = createComputePipeline(state->device, ver.descriptorSetLayout);
+
     uint32_t dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     uint32_t dispatchY = 1;
     uint32_t dispatchZ = 1;
-    ver.commandBuffer = createCommandBuffer(state, dispatchX, dispatchY, dispatchZ);
+    ver.commandBuffer = createCommandBuffer(state, &ver.pipelineDefinition, &ver.descriptorSet,
+                                            dispatchX, dispatchY, dispatchZ);
 
     uint32_t nonZeroCount = matrix->elementNum;
     double execTime = runCommandBuffer(state, &ver.commandBuffer);
