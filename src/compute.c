@@ -900,14 +900,14 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, const float *expecte
     printf("[Vector match check]: Pass!\n");
 }
 
-static void
-runVersionA(VKState *state, ELLMatrix *matrix)
+static VersionA
+createVersionA(VKState *state, ELLMatrix *matrix)
 {
-    VersionA ver = { };
+    VersionA result = { 0 };
 
-    ver.descriptorSetLayout = createDescriptorSetLayout(state->device);
-    ver.descriptorPool = createDescriptorPool(state->device);
-    ver.descriptorSet = createDescriptorSet(state->device, ver.descriptorSetLayout, ver.descriptorPool);
+    result.descriptorSetLayout = createDescriptorSetLayout(state->device);
+    result.descriptorPool = createDescriptorPool(state->device);
+    result.descriptorSet = createDescriptorSet(state->device, result.descriptorSetLayout, result.descriptorPool);
 
     uint32_t matrixSize = 2*matrix->M*matrix->P*sizeof(matrix->data[0])+3*sizeof(uint32_t);
     uint32_t vectorSize = matrix->N*sizeof(matrix->data[0]);
@@ -917,39 +917,48 @@ runVersionA(VKState *state, ELLMatrix *matrix)
     VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
     // Staging buffers
-    ver.matrixBufferAndMemory = createBuffer(state, matrixSize, usageFlags, memoryFlags);
-    ver.inVecBufferAndMemory = createBuffer(state, vectorSize, usageFlags, memoryFlags);
-    ver.outVecBufferAndMemory = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+    result.matrixBufferAndMemory = createBuffer(state, matrixSize, usageFlags, memoryFlags);
+    result.inVecBufferAndMemory = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+    result.outVecBufferAndMemory = createBuffer(state, vectorSize, usageFlags, memoryFlags);
 
     // On device memory buffers
-    ver.matrixDevice = createBuffer(state, matrixSize, usageFlags, deviceMemoryFlags);
-    ver.inVecDevice = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
-    ver.outVecDevice = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
+    result.matrixDevice = createBuffer(state, matrixSize, usageFlags, deviceMemoryFlags);
+    result.inVecDevice = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
+    result.outVecDevice = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
 
-    ELLMatrixToSSBO(state, matrix, ver.matrixBufferAndMemory);
-    InVecToSSBO(state, getSetVector(1.0, matrix->N), ver.inVecBufferAndMemory);
+    ELLMatrixToSSBO(state, matrix, result.matrixBufferAndMemory);
+    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecBufferAndMemory);
 
-    copyStagingBufferToDevice(state, ver.matrixBufferAndMemory, ver.matrixDevice);
-    copyStagingBufferToDevice(state, ver.inVecBufferAndMemory, ver.inVecDevice);
-    copyStagingBufferToDevice(state, ver.outVecBufferAndMemory, ver.outVecDevice);
+    copyStagingBufferToDevice(state, result.matrixBufferAndMemory, result.matrixDevice);
+    copyStagingBufferToDevice(state, result.inVecBufferAndMemory, result.inVecDevice);
+    copyStagingBufferToDevice(state, result.outVecBufferAndMemory, result.outVecDevice);
 
-    bindVersionADescriptorSetWithBuffers(state, &ver);
-    ver.pipelineDefinition = createComputePipeline(state->device, ver.descriptorSetLayout);
+    bindVersionADescriptorSetWithBuffers(state, &result);
+    result.pipelineDefinition = createComputePipeline(state->device, result.descriptorSetLayout);
 
+
+    return result;
+}
+
+static void
+runVersionA(VKState *state, VersionA *versionA, ELLMatrix *matrix)
+{
     uint32_t dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     uint32_t dispatchY = 1;
     uint32_t dispatchZ = 1;
-    ver.commandBuffer = createCommandBuffer(state, &ver.pipelineDefinition, &ver.descriptorSet,
-                                            dispatchX, dispatchY, dispatchZ);
+
+    versionA->commandBuffer = createCommandBuffer(state,
+                                                  &versionA->pipelineDefinition, &versionA->descriptorSet,
+                                                  dispatchX, dispatchY, dispatchZ);
 
     uint32_t nonZeroCount = matrix->elementNum;
-    double execTime = runCommandBuffer(state, &ver.commandBuffer);
+    double execTime = runCommandBuffer(state, &versionA->commandBuffer);
     double gflops = ((2 * nonZeroCount) / execTime) / 1e9;
     printf("%fs [%f GFLOPS]\n", execTime, gflops);
 
-    copyStagingBufferToDevice(state, ver.outVecDevice, ver.outVecBufferAndMemory);
-    printBufferedVector(state, ver.outVecBufferAndMemory);
-    checkIfVectorIsSame(state, ver.outVecBufferAndMemory, expectedVector, matrix->N);
+    copyStagingBufferToDevice(state, versionA->outVecDevice, versionA->outVecBufferAndMemory);
+    printBufferedVector(state, versionA->outVecBufferAndMemory);
+    checkIfVectorIsSame(state, versionA->outVecBufferAndMemory, expectedVector, matrix->N);
 }
 
 int main()
@@ -959,7 +968,8 @@ int main()
 
     VKState state = initalizeVulkan();
 
-    runVersionA(&state, &bcsstk30ELL);
+    VersionA versionA = createVersionA(&state, &bcsstk30ELL);
+    runVersionA(&state, &versionA, &bcsstk30ELL);
 
     return 0;
 }
