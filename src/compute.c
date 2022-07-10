@@ -536,9 +536,9 @@ createQueryPool(VkDevice device)
 }
 
 static VKPipelineDefinition
-createComputePipeline(VkDevice device, VkDescriptorSetLayout descriptorSetLayout)
+createComputePipeline(VkDevice device, const char *shaderPath, VkDescriptorSetLayout descriptorSetLayout)
 {
-    Data spirvData = readEntireFile("build/shaders/sparse_matmul_v1.spv");
+    Data spirvData = readEntireFile(shaderPath);
     VkShaderModuleCreateInfo createInfo = { 0 };
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     createInfo.pCode = (uint32_t *)spirvData.bytes;
@@ -934,8 +934,7 @@ createVersionA(VKState *state, ELLMatrix *matrix)
     copyStagingBufferToDevice(state, result.outVecBufferAndMemory, result.outVecDevice);
 
     bindVersionADescriptorSetWithBuffers(state, &result);
-    result.pipelineDefinition = createComputePipeline(state->device, result.descriptorSetLayout);
-
+    result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v1.spv", result.descriptorSetLayout);
 
     return result;
 }
