@@ -272,13 +272,13 @@ findPhysicalDevice(VkInstance instance)
     VkResult ss = vkEnumeratePhysicalDevices(instance, &deviceCount, devicesArray);
     
     // TODO(radomski): Choose the most powerfull GPU
-    printf("deviceCount = %u\n", deviceCount);
+    printf("[Vulkan Init]: deviceCount = %u\n", deviceCount);
     VkPhysicalDevice result = devicesArray[0];
     free(devicesArray);
 
     VkPhysicalDeviceProperties props = { 0 };
     vkGetPhysicalDeviceProperties(result, &props);
-    printf("Device name = %s\n", props.deviceName);
+    printf("[Vulkan Init]: Chosen device (%s)\n", props.deviceName);
 
     return result;
 }
@@ -809,9 +809,9 @@ ReadMatrixFormatToCOO(const char *filename)
         result.row = malloc(result.elementNum * sizeof(result.row[0]));
         result.col = malloc(result.elementNum * sizeof(result.col[0]));
 
-        printf("MStr = %.*s\n", MStr.length, MStr.bytes);
-        printf("NStr = %.*s\n", NStr.length, NStr.bytes);
-        printf("ElementNum = %d\n", result.elementNum);
+        printf("[COOMatrix Parse]: MStr = %.*s\n", MStr.length, MStr.bytes);
+        printf("[COOMatrix Parse]: NStr = %.*s\n", NStr.length, NStr.bytes);
+        printf("[COOMatrix Parse]: ElementNum = %d\n", result.elementNum);
     }
 
     uint32_t elementIndex = 0;
@@ -1126,13 +1126,17 @@ int main()
 
     VKState state = initalizeVulkan();
 
+    printf("========================================\n");
+
     VersionA versionA = createVersionA(&state, &bcsstk30ELL);
     runVersionA(&state, &versionA, &bcsstk30ELL);
 
-    printf("****************************************\n");
+    printf("========================================\n");
 
     VersionB versionB = createVersionB(&state, &bcsstk30ELL);
     runVersionB(&state, &versionB, &bcsstk30ELL);
+
+    printf("========================================\n");
 
     return 0;
 }
