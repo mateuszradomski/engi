@@ -45,9 +45,19 @@ typedef struct ELLMatrix
     uint32_t elementNum;
 } ELLMatrix;
 
+typedef struct SELLMatrix
+{
+    float *data;
+    uint32_t M, N, C;
+    uint32_t *columnIndex, *rowOffsets;
+    uint32_t elementNum;
+} SELLMatrix;
+
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #define DIV_CEIL(a, b) ((a + b - 1) / b)
+
+#define TO_MEGABYTES(a) ((a) / (1024 * 1024))
 
 #endif

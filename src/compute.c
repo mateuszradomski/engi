@@ -795,6 +795,8 @@ ReadMatrixFormatToCOO(const char *filename)
         }
     }
 
+    uint32_t totalDataAllocated = 0;
+
     {
         // This line has M x N [element count]
         StrSplitIter partIter = StringSplit(line, " ");
@@ -805,13 +807,16 @@ ReadMatrixFormatToCOO(const char *filename)
 
         uint32_t factor = isSymmetric ? 2 : 1;
         result.elementNum = atoi(ElementNumStr.bytes) * factor;
-        result.data = malloc(result.elementNum * sizeof(result.data[0]));
-        result.row = malloc(result.elementNum * sizeof(result.row[0]));
-        result.col = malloc(result.elementNum * sizeof(result.col[0]));
+        uint32_t toAllocate = result.elementNum * sizeof(result.data[0]);
+        result.data = malloc(toAllocate);
+        result.row = malloc(toAllocate);
+        result.col = malloc(toAllocate);
+        totalDataAllocated += 3 * toAllocate;
 
         printf("[COOMatrix Parse]: MStr = %.*s\n", MStr.length, MStr.bytes);
         printf("[COOMatrix Parse]: NStr = %.*s\n", NStr.length, NStr.bytes);
         printf("[COOMatrix Parse]: ElementNum = %d\n", result.elementNum);
+        printf("[COOMatrix Parse]: totalDataAllocated = %uMB\n", TO_MEGABYTES(totalDataAllocated));
     }
 
     uint32_t elementIndex = 0;
@@ -881,6 +886,8 @@ COOToELLMatrix(COOMatrix matrix)
 
     free(PArray);
 
+    uint32_t totalDataAllocated = 0;
+
     result.P = P;
     result.M = M;
     result.N = maxCol-minCol+1;
@@ -888,9 +895,13 @@ COOToELLMatrix(COOMatrix matrix)
     result.columnIndex = malloc(M * P * sizeof(result.columnIndex[0]));
     result.elementNum = matrix.elementNum;
 
+    totalDataAllocated += M*P*sizeof(result.data[0]);
+    totalDataAllocated += M * P * sizeof(result.columnIndex[0]);
+
     printf("[ELLMatrix Parse]: Pmax = %u\n", result.P);
     printf("[ELLMatrix Parse]: M = %u\n", result.M);
     printf("[ELLMatrix Parse]: N = %u\n", result.N);
+    printf("[ELLMatrix Parse]: totalDataAllocated = %uMB\n", TO_MEGABYTES(totalDataAllocated));
     
     memset(result.data, 0, M*P*sizeof(result.data[0]));
     memset(result.columnIndex, 0xff, M*P*sizeof(result.columnIndex[0]));
@@ -908,6 +919,77 @@ COOToELLMatrix(COOMatrix matrix)
             }
         }
     }
+
+    return result;
+}
+
+static SELLMatrix
+ELLToSELLMatrix(ELLMatrix matrix)
+{
+    SELLMatrix result = { 0 };
+
+    result.C = 4;
+    result.M = matrix.M;
+    result.N = matrix.N;
+
+    printf("[SELLMatrix Parse]: M = %u\n", result.M);
+    printf("[SELLMatrix Parse]: N = %u\n", result.N);
+    printf("[SELLMatrix Parse]: C = %u\n", result.C);
+
+    uint32_t totalDataAllocated = 0;
+
+    uint32_t sliceCount = DIV_CEIL(result.M, result.C);
+    uint32_t rowOffsetsSize = (sliceCount + 1) * sizeof(result.rowOffsets[0]);
+    result.rowOffsets = malloc(rowOffsetsSize);
+    memset(result.rowOffsets, 0, rowOffsetsSize);
+    totalDataAllocated += rowOffsetsSize;
+
+    uint32_t *P = malloc(result.C * sizeof(P[0]));
+    for(uint32_t i = 0; i < sliceCount; i++)
+    {
+        memset(P, 0, result.C * sizeof(P[0]));
+        uint32_t offset = i * result.C * matrix.P;
+        for(uint32_t sliceIdx = 0; sliceIdx < result.C; sliceIdx++)
+        {
+            for(uint32_t Pi = 0; Pi < matrix.P; Pi++)
+            {
+                P[sliceIdx] += matrix.columnIndex[Pi + sliceIdx*matrix.P + offset] != INVALID_COLUMN;
+            }
+        }
+
+        uint32_t lastOffset = result.rowOffsets[i];
+        uint32_t currentOffset = MAX(MAX(MAX(P[0], P[1]), P[2]), P[3]) * result.C;
+        result.rowOffsets[i+1] = currentOffset + lastOffset;
+    }
+
+    free(P);
+
+    uint32_t elementsToAllocate = result.rowOffsets[sliceCount];
+    uint32_t rawDataSize = elementsToAllocate * sizeof(result.columnIndex[0]);
+    result.columnIndex = malloc(rawDataSize);
+    result.data = malloc(rawDataSize);
+    totalDataAllocated += 2 * rawDataSize;
+
+    for(uint32_t i = 0; i < sliceCount; i++)
+    {
+        uint32_t sliceP = (result.rowOffsets[i+1] - result.rowOffsets[i]) / result.C;
+
+        for(uint32_t sliceIdx = 0; sliceIdx < result.C; sliceIdx++)
+        {
+            uint32_t ELLOffset = (sliceIdx * matrix.P) + (i * result.C * matrix.P);
+            uint32_t SELLOffset = result.rowOffsets[i] + sliceIdx * sliceP;
+            uint32_t size = sliceP * sizeof(result.columnIndex[0]);
+
+            void *colDst  = result.columnIndex + SELLOffset;
+            void *colSrc  = matrix.columnIndex + ELLOffset;
+            void *dataDst = result.data + SELLOffset;
+            void *dataSrc = matrix.data + ELLOffset;
+            memcpy(colDst, colSrc, size);
+            memcpy(dataDst, dataSrc, size);
+        }
+    }
+
+    printf("[SELLMatrix Parse]: totalDataAllocated = %uMB\n", TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
@@ -1123,6 +1205,7 @@ int main()
 {
     COOMatrix bcsstk30COO = ReadMatrixFormatToCOO("data/bcsstk30.mtx");
     ELLMatrix bcsstk30ELL = COOToELLMatrix(bcsstk30COO);
+    SELLMatrix bcsstk30SELL = ELLToSELLMatrix(bcsstk30ELL);
 
     VKState state = initalizeVulkan();
 
