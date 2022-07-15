@@ -6,11 +6,12 @@ pushd build
 if not exist "shaders" mkdir shaders
 
 pushd shaders
-glslc.exe -O ..\..\shaders\matmul_v1.comp -o matmul_v1.spv
-glslc.exe -O ..\..\shaders\matmul_v2.comp -o matmul_v2.spv
-glslc.exe -O ..\..\shaders\matmul_v3.comp -o matmul_v3.spv
+@REM glslc.exe -O ..\..\shaders\matmul_v1.comp -o matmul_v1.spv
+@REM glslc.exe -O ..\..\shaders\matmul_v2.comp -o matmul_v2.spv
+@REM glslc.exe -O ..\..\shaders\matmul_v3.comp -o matmul_v3.spv
 glslc.exe -O ..\..\shaders\sparse_matmul_v1.comp -o sparse_matmul_v1.spv
 glslc.exe -O ..\..\shaders\sparse_matmul_v2.comp -o sparse_matmul_v2.spv
+glslc.exe -O ..\..\shaders\sparse_matmul_v3.comp -o sparse_matmul_v3.spv
 popd
 
 @REM -fsanitize=address ^

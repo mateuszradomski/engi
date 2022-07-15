@@ -17,18 +17,20 @@
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
+#define RUNS_PER_VERSION 5
+
 typedef struct VKDeviceAndComputeQueue
 {
     VkDevice device;
     VkQueue computeQueue;
-    uint32_t computeQueueFamilyIndex;
+    u32 computeQueueFamilyIndex;
 } VKDeviceAndComputeQueue;
 
 typedef struct VKBufferAndMemory
 {
     VkBuffer buffer;
     VkDeviceMemory bufferMemory;
-    uint32_t bufferSize;
+    u32 bufferSize;
 } VKBufferAndMemory;
 
 typedef struct VKPipelineDefinition
@@ -44,7 +46,7 @@ typedef struct VKState
 
     VkDevice device;
     VkQueue computeQueue;
-    uint32_t computeQueueFamilyIndex;
+    u32 computeQueueFamilyIndex;
 
     VkQueryPool queryPool;
     VkCommandPool commandPool;
@@ -88,6 +90,27 @@ typedef struct VersionB
     VkCommandBuffer commandBuffer;
 } VersionB;
 
+typedef struct VersionC
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matHeaderAndColIndexHost;
+    VKBufferAndMemory matRowOffsetsHost;
+    VKBufferAndMemory matFloatDataHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matHeaderAndColIndexDevice;
+    VKBufferAndMemory matRowOffsetsDevice;
+    VKBufferAndMemory matFloatDataDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} VersionC;
 
 #define VK_CALL(f) 																				        \
 {																										\
@@ -99,13 +122,13 @@ typedef struct VersionB
     }																									\
 }
 
-uint32_t glob_rand_state = 0x34fae2;
+u32 glob_rand_state = 0x34fae2;
 
-static uint32_t
+static u32
 xorshift32()
 {
-	uint32_t *state = &glob_rand_state;
-	uint32_t x = *state;
+	u32 *state = &glob_rand_state;
+	u32 x = *state;
 	x ^= x << 13;
 	x ^= x >> 17;
 	x ^= x << 5;
@@ -115,7 +138,7 @@ xorshift32()
 static double
 randomUnilateral()
 {
-    uint32_t rand = xorshift32();
+    u32 rand = xorshift32();
     float result = ((float)(rand) / (float)(0xffffffff));
     return result;
 }
@@ -132,7 +155,7 @@ double getWallTime()
 #endif
 
 static bool
-StringsMatchRaw(char *str1, uint32_t str1Length, char *str2, uint32_t str2Length) {
+StringsMatchRaw(char *str1, u32 str1Length, char *str2, u32 str2Length) {
     if(str1Length == str2Length) {
         for(int i = 0; i < str1Length; i++) {
             if(str1[i] != str2[i]) {
@@ -172,13 +195,13 @@ NextInSplit(StrSplitIter *it)
 {
   Str result = { 0 };
 
-  uint32_t alreadyRead = (uint32_t)(it->head - it->str);
+  u32 alreadyRead = (u32)(it->head - it->str);
 
   if(alreadyRead < it->strLength) {
     result.bytes = it->head;
-    uint32_t bytesLeft = it->strLength - alreadyRead;
+    u32 bytesLeft = it->strLength - alreadyRead;
 
-    for (uint32_t i = 0;
+    for (u32 i = 0;
          (i < bytesLeft) && (it->delimLength < bytesLeft) &&
           !StringsMatchRaw(it->head, it->delimLength, it->delim, it->delimLength);
          i++)
@@ -210,7 +233,7 @@ readEntireFile(const char *fileName)
     result.length = ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
-    uint8_t *str = malloc(sizeof(uint8_t) * (result.length + 1));
+    u8 *str = malloc(sizeof(u8) * (result.length + 1));
     fread(str, result.length, sizeof(char), fp);
     fclose(fp);
     str[result.length] = 0x0;
@@ -229,6 +252,18 @@ readEntireFileStr(const char *filename)
     result.length = data.length - 1;
 
     return result;
+}
+
+static void
+printRunInfo(RunInformation *runInfo, u32 len)
+{
+    const char *col1 = "Exec time [s]";
+    const char *col2 = "GFLOPs";
+    printf("| %15s | %15s |\n", col1, col2);
+    for(u32 i = 0; i < len; i++)
+    {
+        printf("| %15f | %15f |\n", runInfo[i].time, runInfo[i].gflops);
+    }
 }
 
 static VkInstance
@@ -261,7 +296,7 @@ createInstance()
 static VkPhysicalDevice
 findPhysicalDevice(VkInstance instance)
 {
-    uint32_t deviceCount;
+    u32 deviceCount;
     vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
     if (deviceCount == 0)
     {
@@ -283,16 +318,16 @@ findPhysicalDevice(VkInstance instance)
     return result;
 }
 
-static uint32_t
+static u32
 getComputeQueueFamilyIndex(VkPhysicalDevice phyDevice)
 {
-    uint32_t queueFamilyCount;
+    u32 queueFamilyCount;
     vkGetPhysicalDeviceQueueFamilyProperties(phyDevice, &queueFamilyCount, NULL);
 
     VkQueueFamilyProperties *queueFamiliesArray = malloc(sizeof(VkQueueFamilyProperties) * queueFamilyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(phyDevice, &queueFamilyCount, queueFamiliesArray);
 
-    uint32_t queueFamilyIndex = 0;
+    u32 queueFamilyIndex = 0;
     for(; queueFamilyIndex < queueFamilyCount; queueFamilyIndex++)
     {
         VkQueueFamilyProperties queueProperty = queueFamiliesArray[queueFamilyIndex];
@@ -317,7 +352,7 @@ createDevice(VkPhysicalDevice phyDevice)
 {
     VkDeviceQueueCreateInfo queueCreateInfo = { 0 };
     queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    uint32_t queueFamilyIndex = getComputeQueueFamilyIndex(phyDevice);
+    u32 queueFamilyIndex = getComputeQueueFamilyIndex(phyDevice);
     queueCreateInfo.queueFamilyIndex = queueFamilyIndex;
     queueCreateInfo.queueCount = 1;
     float queuePriorities = 1.0;
@@ -346,8 +381,8 @@ createDevice(VkPhysicalDevice phyDevice)
     return result;
 }
 
-static uint32_t
-findMemoryType(VkPhysicalDevice phyDevice, uint32_t memoryTypeBits, VkMemoryPropertyFlags props)
+static u32
+findMemoryType(VkPhysicalDevice phyDevice, u32 memoryTypeBits, VkMemoryPropertyFlags props)
 {
     VkPhysicalDeviceMemoryProperties memoryProps;
     vkGetPhysicalDeviceMemoryProperties(phyDevice, &memoryProps);
@@ -355,7 +390,7 @@ findMemoryType(VkPhysicalDevice phyDevice, uint32_t memoryTypeBits, VkMemoryProp
     // TODO(radomski): Read about it
     // Source:
     // https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPhysicalDeviceMemoryProperties.html
-    for (uint32_t memoryIndex = 0; memoryIndex < memoryProps.memoryTypeCount; ++memoryIndex)
+    for (u32 memoryIndex = 0; memoryIndex < memoryProps.memoryTypeCount; ++memoryIndex)
     {
         if ((memoryTypeBits & (1 << memoryIndex)) &&
             ((memoryProps.memoryTypes[memoryIndex].propertyFlags & props) == props))
@@ -367,7 +402,7 @@ findMemoryType(VkPhysicalDevice phyDevice, uint32_t memoryTypeBits, VkMemoryProp
 }
 
 static VKBufferAndMemory
-createBuffer(VKState *state, uint32_t bufferSize, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryFlags)
+createBuffer(VKState *state, u32 bufferSize, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryFlags)
 {
     VkBufferCreateInfo bufferCreateInfo = { 0 };
     bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -530,13 +565,13 @@ copyStagingBufferToDevice(VKState *state, VKBufferAndMemory staging, VKBufferAnd
 }
 
 static VkDescriptorSetLayout
-createConsecutiveDescriptorSetLayout(VkDevice device, uint32_t num)
+createConsecutiveDescriptorSetLayout(VkDevice device, u32 num)
 {
-    uint32_t size = num * sizeof(VkDescriptorSetLayoutBinding);
+    u32 size = num * sizeof(VkDescriptorSetLayoutBinding);
     VkDescriptorSetLayoutBinding *descriptorSetLayoutBindingArray = malloc(size);
     memset(descriptorSetLayoutBindingArray, 0, size);
 
-    for(uint32_t i = 0; i < num; i++)
+    for(u32 i = 0; i < num; i++)
     {
         descriptorSetLayoutBindingArray[i].binding = i;
         descriptorSetLayoutBindingArray[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -613,7 +648,7 @@ createComputePipeline(VkDevice device, const char *shaderPath, VkDescriptorSetLa
     Data spirvData = readEntireFile(shaderPath);
     VkShaderModuleCreateInfo createInfo = { 0 };
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.pCode = (uint32_t *)spirvData.bytes;
+    createInfo.pCode = (u32 *)spirvData.bytes;
     createInfo.codeSize = spirvData.length;
 
     VkShaderModule computeShaderModule;
@@ -649,7 +684,7 @@ createComputePipeline(VkDevice device, const char *shaderPath, VkDescriptorSetLa
 
 static VkCommandBuffer
 createCommandBuffer(VKState *state, VKPipelineDefinition *pipelineDefinition, VkDescriptorSet *descriptorSet,
-                    uint32_t dispatchX, uint32_t dispatchY, uint32_t dispatchZ)
+                    u32 dispatchX, u32 dispatchY, u32 dispatchZ)
 {
     VkCommandBuffer result = { 0 };
 
@@ -728,9 +763,9 @@ runCommandBuffer(VKState *instance, VkCommandBuffer *commandBuffer)
     VK_CALL(vkCreateFence(instance->device, &fenceCreateInfo, NULL, &fence));
     VK_CALL(vkQueueSubmit(instance->computeQueue, 1, &submitInfo, fence));
     VK_CALL(vkWaitForFences(instance->device, 1, &fence, VK_TRUE, 100000000000));
-    uint64_t ts[2];
+    u64 ts[2];
     VK_CALL(vkGetQueryPoolResults(instance->device, instance->queryPool,
-                                           0, 2, sizeof(uint64_t) * 2, ts, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
+                                           0, 2, sizeof(u64) * 2, ts, sizeof(u64), VK_QUERY_RESULT_64_BIT));
     vkDestroyFence(instance->device, fence, NULL);
 
     double execTime = (ts[1] - ts[0]) / 1e9;
@@ -738,11 +773,11 @@ runCommandBuffer(VKState *instance, VkCommandBuffer *commandBuffer)
 }
 
 static void
-printMatrix(float *data, uint32_t matrixSize)
+printMatrix(float *data, u32 matrixSize)
 {
-    for (uint32_t row = 0; row < matrixSize; row++)
+    for (u32 row = 0; row < matrixSize; row++)
     {
-        for (uint32_t col = 0; col < matrixSize; col++)
+        for (u32 col = 0; col < matrixSize; col++)
         {
             printf("%f ", data[row * matrixSize + col]);
         }
@@ -795,7 +830,7 @@ ReadMatrixFormatToCOO(const char *filename)
         }
     }
 
-    uint32_t totalDataAllocated = 0;
+    u32 totalDataAllocated = 0;
 
     {
         // This line has M x N [element count]
@@ -805,9 +840,9 @@ ReadMatrixFormatToCOO(const char *filename)
         Str ElementNumStr = NextInSplit(&partIter);
         assert(MStr.bytes && NStr.bytes && ElementNumStr.bytes);
 
-        uint32_t factor = isSymmetric ? 2 : 1;
+        u32 factor = isSymmetric ? 2 : 1;
         result.elementNum = atoi(ElementNumStr.bytes) * factor;
-        uint32_t toAllocate = result.elementNum * sizeof(result.data[0]);
+        u32 toAllocate = result.elementNum * sizeof(result.data[0]);
         result.data = malloc(toAllocate);
         result.row = malloc(toAllocate);
         result.col = malloc(toAllocate);
@@ -819,7 +854,7 @@ ReadMatrixFormatToCOO(const char *filename)
         printf("[COOMatrix Parse]: totalDataAllocated = %uMB\n", TO_MEGABYTES(totalDataAllocated));
     }
 
-    uint32_t elementIndex = 0;
+    u32 elementIndex = 0;
     while((line = NextInSplit(&lineIter)).bytes != NULL)
     {
         StrSplitIter partIter = StringSplit(line, " ");
@@ -828,8 +863,8 @@ ReadMatrixFormatToCOO(const char *filename)
         Str ValueStr = NextInSplit(&partIter);
         assert(RowStr.bytes && ColStr.bytes && ValueStr.length == 0);
 
-        uint32_t row = atoi(RowStr.bytes);
-        uint32_t col = atoi(ColStr.bytes);
+        u32 row = atoi(RowStr.bytes);
+        u32 col = atoi(ColStr.bytes);
         result.row[elementIndex] = row;
         result.col[elementIndex] = col;
         result.data[elementIndex] = 1.0f;
@@ -856,10 +891,10 @@ COOToELLMatrix(COOMatrix matrix)
 {
     ELLMatrix result = { 0 };
 
-    uint32_t minRow = INT_MAX;
-    uint32_t minCol = INT_MAX;
-    uint32_t maxRow = 0;
-    uint32_t maxCol = 0;
+    u32 minRow = INT_MAX;
+    u32 minCol = INT_MAX;
+    u32 maxRow = 0;
+    u32 maxCol = 0;
 
     for(int i = 0; i < matrix.elementNum; i++)
     {
@@ -869,24 +904,24 @@ COOToELLMatrix(COOMatrix matrix)
         maxCol = MAX(matrix.col[i], maxCol);
     }
 
-    uint32_t M = maxRow-minRow+1;
-    uint32_t *PArray = malloc(M*sizeof(uint32_t));
-    memset(PArray, 0, M*sizeof(uint32_t));
+    u32 M = maxRow-minRow+1;
+    u32 *PArray = malloc(M*sizeof(u32));
+    memset(PArray, 0, M*sizeof(u32));
 
     for (int i = 0; i < matrix.elementNum; i++)
     {
         PArray[matrix.row[i] - minRow] += 1;
     }
 
-    uint32_t P = 0;
-    for(uint32_t rowIndex = 0; rowIndex < M; rowIndex++)
+    u32 P = 0;
+    for(u32 rowIndex = 0; rowIndex < M; rowIndex++)
     {
         P = MAX(P, PArray[rowIndex]);
     }
 
     free(PArray);
 
-    uint32_t totalDataAllocated = 0;
+    u32 totalDataAllocated = 0;
 
     result.P = P;
     result.M = M;
@@ -908,9 +943,9 @@ COOToELLMatrix(COOMatrix matrix)
 
     for (int i = 0; i < matrix.elementNum; i++)
     {
-        uint32_t startIndex = (matrix.row[i] - minRow) * result.P;
-        uint32_t endIndex = (matrix.row[i] - minRow + 1) * result.P;
-        for(uint32_t k = startIndex; k < endIndex; k++)
+        u32 startIndex = (matrix.row[i] - minRow) * result.P;
+        u32 endIndex = (matrix.row[i] - minRow + 1) * result.P;
+        for(u32 k = startIndex; k < endIndex; k++)
         {
             if(result.columnIndex[k] == INVALID_COLUMN) {
                 result.columnIndex[k] = matrix.col[i] - minCol;
@@ -931,54 +966,55 @@ ELLToSELLMatrix(ELLMatrix matrix)
     result.C = 4;
     result.M = matrix.M;
     result.N = matrix.N;
+    result.elementNum = matrix.elementNum; 
 
     printf("[SELLMatrix Parse]: M = %u\n", result.M);
     printf("[SELLMatrix Parse]: N = %u\n", result.N);
     printf("[SELLMatrix Parse]: C = %u\n", result.C);
 
-    uint32_t totalDataAllocated = 0;
+    u32 totalDataAllocated = 0;
 
-    uint32_t sliceCount = DIV_CEIL(result.M, result.C);
-    uint32_t rowOffsetsSize = (sliceCount + 1) * sizeof(result.rowOffsets[0]);
+    u32 sliceCount = DIV_CEIL(result.M, result.C);
+    u32 rowOffsetsSize = (sliceCount + 1) * sizeof(result.rowOffsets[0]);
     result.rowOffsets = malloc(rowOffsetsSize);
     memset(result.rowOffsets, 0, rowOffsetsSize);
     totalDataAllocated += rowOffsetsSize;
 
-    uint32_t *P = malloc(result.C * sizeof(P[0]));
-    for(uint32_t i = 0; i < sliceCount; i++)
+    u32 *P = malloc(result.C * sizeof(P[0]));
+    for(u32 i = 0; i < sliceCount; i++)
     {
         memset(P, 0, result.C * sizeof(P[0]));
-        uint32_t offset = i * result.C * matrix.P;
-        for(uint32_t sliceIdx = 0; sliceIdx < result.C; sliceIdx++)
+        u32 offset = i * result.C * matrix.P;
+        for(u32 sliceIdx = 0; sliceIdx < result.C; sliceIdx++)
         {
-            for(uint32_t Pi = 0; Pi < matrix.P; Pi++)
+            for(u32 Pi = 0; Pi < matrix.P; Pi++)
             {
                 P[sliceIdx] += matrix.columnIndex[Pi + sliceIdx*matrix.P + offset] != INVALID_COLUMN;
             }
         }
 
-        uint32_t lastOffset = result.rowOffsets[i];
-        uint32_t currentOffset = MAX(MAX(MAX(P[0], P[1]), P[2]), P[3]) * result.C;
+        u32 lastOffset = result.rowOffsets[i];
+        u32 currentOffset = MAX(MAX(MAX(P[0], P[1]), P[2]), P[3]) * result.C;
         result.rowOffsets[i+1] = currentOffset + lastOffset;
     }
 
     free(P);
 
-    uint32_t elementsToAllocate = result.rowOffsets[sliceCount];
-    uint32_t rawDataSize = elementsToAllocate * sizeof(result.columnIndex[0]);
+    u32 elementsToAllocate = result.rowOffsets[sliceCount];
+    u32 rawDataSize = elementsToAllocate * sizeof(result.columnIndex[0]);
     result.columnIndex = malloc(rawDataSize);
     result.data = malloc(rawDataSize);
     totalDataAllocated += 2 * rawDataSize;
 
-    for(uint32_t i = 0; i < sliceCount; i++)
+    for(u32 i = 0; i < sliceCount; i++)
     {
-        uint32_t sliceP = (result.rowOffsets[i+1] - result.rowOffsets[i]) / result.C;
+        u32 sliceP = (result.rowOffsets[i+1] - result.rowOffsets[i]) / result.C;
 
-        for(uint32_t sliceIdx = 0; sliceIdx < result.C; sliceIdx++)
+        for(u32 sliceIdx = 0; sliceIdx < result.C; sliceIdx++)
         {
-            uint32_t ELLOffset = (sliceIdx * matrix.P) + (i * result.C * matrix.P);
-            uint32_t SELLOffset = result.rowOffsets[i] + sliceIdx * sliceP;
-            uint32_t size = sliceP * sizeof(result.columnIndex[0]);
+            u32 ELLOffset = (sliceIdx * matrix.P) + (i * result.C * matrix.P);
+            u32 SELLOffset = result.rowOffsets[i] + sliceIdx * sliceP;
+            u32 size = sliceP * sizeof(result.columnIndex[0]);
 
             void *colDst  = result.columnIndex + SELLOffset;
             void *colSrc  = matrix.columnIndex + ELLOffset;
@@ -995,7 +1031,7 @@ ELLToSELLMatrix(ELLMatrix matrix)
 }
 
 static Vector
-getSetVector(float v, uint32_t len)
+getSetVector(float v, u32 len)
 {
     Vector res = { 0 };
 
@@ -1018,12 +1054,12 @@ InVecToSSBO(VKState *state, Vector vec, VKBufferAndMemory ssbo)
 }
 
 static void
-checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, const float *expected, uint32_t len)
+checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, const float *expected, u32 len)
 {
     void *mappedMemory = NULL;
     vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
     float *mappedMemoryFloat = (float *)mappedMemory;
-    for(uint32_t i = 0; i < len; i++)
+    for(u32 i = 0; i < len; i++)
     {
         if(mappedMemoryFloat[i] != expected[i]) {
             printf("i, lhs == rhs | %d, %f == %f\n", i, mappedMemoryFloat[i], expected[i]);
@@ -1044,8 +1080,8 @@ createVersionA(VKState *state, ELLMatrix *matrix)
     result.descriptorPool = createDescriptorPool(state->device);
     result.descriptorSet = createDescriptorSet(state->device, result.descriptorSetLayout, result.descriptorPool);
 
-    uint32_t matrixSize = 2*matrix->M*matrix->P*sizeof(matrix->data[0])+3*sizeof(uint32_t);
-    uint32_t vectorSize = matrix->N*sizeof(matrix->data[0]);
+    u32 matrixSize = 2*matrix->M*matrix->P*sizeof(matrix->data[0])+3*sizeof(u32);
+    u32 vectorSize = matrix->N*sizeof(matrix->data[0]);
 
     VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
@@ -1066,12 +1102,12 @@ createVersionA(VKState *state, ELLMatrix *matrix)
 
         void *mappedMemory = NULL;
         vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
-        uint32_t *u32MappedMemory = (uint32_t *)mappedMemory;
+        u32 *u32MappedMemory = (u32 *)mappedMemory;
         u32MappedMemory[0] = matrix->M;
         u32MappedMemory[1] = matrix->P;
         u32MappedMemory[2] = matrix->N;
-        uint8_t *data = (uint8_t *)(u32MappedMemory + 3);
-        uint32_t MP = matrix->M * matrix->P;
+        u8 *data = (u8 *)(u32MappedMemory + 3);
+        u32 MP = matrix->M * matrix->P;
 
         memcpy(data, matrix->columnIndex, MP * sizeof(matrix->columnIndex[0]));
         data += MP * sizeof(matrix->columnIndex[0]);
@@ -1095,17 +1131,22 @@ createVersionA(VKState *state, ELLMatrix *matrix)
 static void
 runVersionA(VKState *state, VersionA *ver, ELLMatrix *matrix)
 {
-    uint32_t dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
-    uint32_t dispatchY = 1;
-    uint32_t dispatchZ = 1;
+    u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
+    u32 dispatchY = 1;
+    u32 dispatchZ = 1;
 
     ver->commandBuffer = createCommandBuffer(state, &ver->pipelineDefinition, &ver->descriptorSet,
                                              dispatchX, dispatchY, dispatchZ);
 
-    uint32_t nonZeroCount = matrix->elementNum;
-    double execTime = runCommandBuffer(state, &ver->commandBuffer);
-    double gflops = ((2 * nonZeroCount) / execTime) / 1e9;
-    printf("%fs [%f GFLOPS]\n", execTime, gflops);
+    RunInformation runInfo[RUNS_PER_VERSION] = { 0 };
+    for(u32 i = 0; i < RUNS_PER_VERSION; i++)
+    {
+        u32 nonZeroCount = matrix->elementNum;
+        runInfo[i].time = runCommandBuffer(state, &ver->commandBuffer);
+        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
+    }
+
+    printRunInfo(runInfo, ARRAY_LEN(runInfo));
 
     copyStagingBufferToDevice(state, ver->outVecDevice, ver->outVecBufferAndMemory);
     checkIfVectorIsSame(state, ver->outVecBufferAndMemory, expectedVector, matrix->N);
@@ -1120,9 +1161,9 @@ createVersionB(VKState *state, ELLMatrix *matrix)
     result.descriptorPool = createDescriptorPool(state->device);
     result.descriptorSet = createDescriptorSet(state->device, result.descriptorSetLayout, result.descriptorPool);
 
-    uint32_t matrixSizeIntData = matrix->M*matrix->P*sizeof(matrix->data[0])+3*sizeof(uint32_t);
-    uint32_t matrixSizeFloatData = matrix->M*matrix->P*sizeof(matrix->data[0]);
-    uint32_t vectorSize = matrix->N*sizeof(matrix->data[0]);
+    u32 matrixSizeIntData = matrix->M*matrix->P*sizeof(matrix->data[0])+3*sizeof(u32);
+    u32 matrixSizeFloatData = matrix->M*matrix->P*sizeof(matrix->data[0]);
+    u32 vectorSize = matrix->N*sizeof(matrix->data[0]);
 
     VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
@@ -1145,13 +1186,13 @@ createVersionB(VKState *state, ELLMatrix *matrix)
 
         void *mappedMemory = NULL;
         vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
-        uint32_t *u32MappedMemory = (uint32_t *)mappedMemory;
+        u32 *u32MappedMemory = (u32 *)mappedMemory;
         u32MappedMemory[0] = matrix->M;
         u32MappedMemory[1] = matrix->P;
         u32MappedMemory[2] = matrix->N;
-        uint8_t *data = (uint8_t *)(u32MappedMemory + 3);
+        u8 *data = (u8 *)(u32MappedMemory + 3);
 
-        uint32_t MP = matrix->M * matrix->P;
+        u32 MP = matrix->M * matrix->P;
         memcpy(data, matrix->columnIndex, MP * sizeof(matrix->columnIndex[0]));
 
         vkUnmapMemory(state->device, ssbo.bufferMemory);
@@ -1163,7 +1204,7 @@ createVersionB(VKState *state, ELLMatrix *matrix)
         void *mappedMemory = NULL;
         vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
 
-        uint32_t MP = matrix->M * matrix->P;
+        u32 MP = matrix->M * matrix->P;
         memcpy(mappedMemory, matrix->data, MP * sizeof(matrix->data[0]));
 
         vkUnmapMemory(state->device, ssbo.bufferMemory);
@@ -1185,20 +1226,199 @@ createVersionB(VKState *state, ELLMatrix *matrix)
 static void
 runVersionB(VKState *state, VersionB *ver, ELLMatrix *matrix)
 {
-    uint32_t dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
-    uint32_t dispatchY = 1;
-    uint32_t dispatchZ = 1;
+    u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
+    u32 dispatchY = 1;
+    u32 dispatchZ = 1;
 
     ver->commandBuffer = createCommandBuffer(state, &ver->pipelineDefinition, &ver->descriptorSet,
                                              dispatchX, dispatchY, dispatchZ);
 
-    uint32_t nonZeroCount = matrix->elementNum;
-    double execTime = runCommandBuffer(state, &ver->commandBuffer);
-    double gflops = ((2 * nonZeroCount) / execTime) / 1e9;
-    printf("%fs [%f GFLOPS]\n", execTime, gflops);
+    RunInformation runInfo[RUNS_PER_VERSION] = { 0 };
+    for(u32 i = 0; i < RUNS_PER_VERSION; i++)
+    {
+        u32 nonZeroCount = matrix->elementNum;
+        runInfo[i].time = runCommandBuffer(state, &ver->commandBuffer);
+        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
+    }
+
+    printRunInfo(runInfo, ARRAY_LEN(runInfo));
 
     copyStagingBufferToDevice(state, ver->outVecDevice, ver->outVecBufferAndMemory);
     checkIfVectorIsSame(state, ver->outVecBufferAndMemory, expectedVector, matrix->N);
+}
+
+static void
+bindVersionCDescriptorSetWithBuffers(VKState *state, VersionC *ver)
+{
+    // Bind buffer with descriptor set
+    VkDescriptorBufferInfo descriptorBufferInfoArray[5] = { 0 };
+    descriptorBufferInfoArray[0].buffer = ver->matHeaderAndColIndexDevice.buffer;
+    descriptorBufferInfoArray[0].offset = 0;
+    descriptorBufferInfoArray[0].range = ver->matHeaderAndColIndexDevice.bufferSize;
+
+    descriptorBufferInfoArray[1].buffer = ver->matRowOffsetsDevice.buffer;
+    descriptorBufferInfoArray[1].offset = 0;
+    descriptorBufferInfoArray[1].range = ver->matRowOffsetsDevice.bufferSize;
+
+    descriptorBufferInfoArray[2].buffer = ver->matFloatDataDevice.buffer;
+    descriptorBufferInfoArray[2].offset = 0;
+    descriptorBufferInfoArray[2].range = ver->matFloatDataDevice.bufferSize;
+
+    descriptorBufferInfoArray[3].buffer = ver->inVecDevice.buffer;
+    descriptorBufferInfoArray[3].offset = 0;
+    descriptorBufferInfoArray[3].range = ver->inVecDevice.bufferSize;
+
+    descriptorBufferInfoArray[4].buffer = ver->outVecDevice.buffer;
+    descriptorBufferInfoArray[4].offset = 0;
+    descriptorBufferInfoArray[4].range = ver->outVecDevice.bufferSize;
+
+    VkWriteDescriptorSet writeDescriptorSetsArray[5] = { 0 };
+    writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[0].dstSet = ver->descriptorSet;
+    writeDescriptorSetsArray[0].dstBinding = 0;
+    writeDescriptorSetsArray[0].descriptorCount = 1;
+    writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
+
+    writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[1].dstSet = ver->descriptorSet;
+    writeDescriptorSetsArray[1].dstBinding = 1;
+    writeDescriptorSetsArray[1].descriptorCount = 1;
+    writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
+
+    writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[2].dstSet = ver->descriptorSet;
+    writeDescriptorSetsArray[2].dstBinding = 2;
+    writeDescriptorSetsArray[2].descriptorCount = 1;
+    writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[2].pBufferInfo = &descriptorBufferInfoArray[2];
+
+    writeDescriptorSetsArray[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[3].dstSet = ver->descriptorSet;
+    writeDescriptorSetsArray[3].dstBinding = 3;
+    writeDescriptorSetsArray[3].descriptorCount = 1;
+    writeDescriptorSetsArray[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[3].pBufferInfo = &descriptorBufferInfoArray[3];
+
+    writeDescriptorSetsArray[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[4].dstSet = ver->descriptorSet;
+    writeDescriptorSetsArray[4].dstBinding = 4;
+    writeDescriptorSetsArray[4].descriptorCount = 1;
+    writeDescriptorSetsArray[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[4].pBufferInfo = &descriptorBufferInfoArray[4];
+
+    vkUpdateDescriptorSets(state->device, ARRAY_LEN(writeDescriptorSetsArray), writeDescriptorSetsArray, 0, NULL);
+}
+
+static VersionC
+createVersionC(VKState *state, SELLMatrix *matrix)
+{
+    VersionC result = { 0 };
+
+    result.descriptorSetLayout = createConsecutiveDescriptorSetLayout(state->device, 5);
+    result.descriptorPool = createDescriptorPool(state->device);
+    result.descriptorSet = createDescriptorSet(state->device, result.descriptorSetLayout, result.descriptorPool);
+
+    u32 sliceCount        = DIV_CEIL(matrix->M, matrix->C);
+    u32 elementsAllocated = matrix->rowOffsets[sliceCount];
+
+    u32 headerSize      = 3*sizeof(u32);
+    u32 columnIndexSize = elementsAllocated * sizeof(matrix->columnIndex[0]);
+    u32 rowOffsetsSize  = (sliceCount+1) * sizeof(matrix->rowOffsets[0]);
+    u32 floatDataSize   = elementsAllocated * sizeof(matrix->data[0]);
+    u32 vectorSize      = matrix->N*sizeof(matrix->data[0]);
+
+    VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    // Staging buffers
+    result.matHeaderAndColIndexHost = createBuffer(state, headerSize + columnIndexSize, usageFlags, memoryFlags);
+    result.matRowOffsetsHost        = createBuffer(state, rowOffsetsSize, usageFlags, memoryFlags);
+    result.matFloatDataHost         = createBuffer(state, floatDataSize, usageFlags, memoryFlags);
+    result.inVecHost                = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+    result.outVecHost               = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+
+    // On device memory buffers
+    result.matHeaderAndColIndexDevice = createBuffer(state, headerSize + columnIndexSize, usageFlags, memoryFlags);
+    result.matRowOffsetsDevice        = createBuffer(state, rowOffsetsSize, usageFlags, memoryFlags);
+    result.matFloatDataDevice         = createBuffer(state, floatDataSize, usageFlags, memoryFlags);
+    result.inVecDevice                = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+    result.outVecDevice               = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+
+    {
+        VKBufferAndMemory ssbo = result.matHeaderAndColIndexHost;
+
+        void *mappedMemory = NULL;
+        vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+        u32 *u32MappedMemory = (u32 *)mappedMemory;
+        u32MappedMemory[0] = matrix->M;
+        u32MappedMemory[1] = matrix->C;
+        u32MappedMemory[2] = matrix->N;
+        u8 *data = (u8 *)(u32MappedMemory + 3);
+
+        memcpy(data, matrix->columnIndex, columnIndexSize);
+
+        vkUnmapMemory(state->device, ssbo.bufferMemory);
+    }
+
+    {
+        VKBufferAndMemory ssbo = result.matRowOffsetsHost;
+
+        void *mappedMemory = NULL;
+        vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+        memcpy(mappedMemory, matrix->rowOffsets, rowOffsetsSize);
+
+        vkUnmapMemory(state->device, ssbo.bufferMemory);
+    }
+
+    {
+        VKBufferAndMemory ssbo = result.matFloatDataHost;
+
+        void *mappedMemory = NULL;
+        vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+        memcpy(mappedMemory, matrix->data, floatDataSize);
+
+        vkUnmapMemory(state->device, ssbo.bufferMemory);
+    }
+
+    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecHost);
+
+    copyStagingBufferToDevice(state, result.matHeaderAndColIndexHost, result.matHeaderAndColIndexDevice);
+    copyStagingBufferToDevice(state, result.matRowOffsetsHost, result.matRowOffsetsDevice);
+    copyStagingBufferToDevice(state, result.matFloatDataHost, result.matFloatDataDevice);
+    copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
+    copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
+
+    bindVersionCDescriptorSetWithBuffers(state, &result);
+    result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v3.spv", result.descriptorSetLayout);
+
+    return result;
+}
+
+static void
+runVersionC(VKState *state, VersionC *ver, SELLMatrix *matrix)
+{
+    u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
+    u32 dispatchY = 1;
+    u32 dispatchZ = 1;
+
+    ver->commandBuffer = createCommandBuffer(state, &ver->pipelineDefinition, &ver->descriptorSet,
+                                             dispatchX, dispatchY, dispatchZ);
+
+    RunInformation runInfo[RUNS_PER_VERSION] = { 0 };
+    for(u32 i = 0; i < RUNS_PER_VERSION; i++)
+    {
+        u32 nonZeroCount = matrix->elementNum;
+        runInfo[i].time = runCommandBuffer(state, &ver->commandBuffer);
+        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
+    }
+
+    printRunInfo(runInfo, ARRAY_LEN(runInfo));
+
+    copyStagingBufferToDevice(state, ver->outVecDevice, ver->outVecHost);
+    checkIfVectorIsSame(state, ver->outVecHost, expectedVector, matrix->N);
 }
 
 int main()
@@ -1218,6 +1438,11 @@ int main()
 
     VersionB versionB = createVersionB(&state, &bcsstk30ELL);
     runVersionB(&state, &versionB, &bcsstk30ELL);
+
+    printf("========================================\n");
+
+    VersionC versionC = createVersionC(&state, &bcsstk30SELL);
+    runVersionC(&state, &versionC, &bcsstk30SELL);
 
     printf("========================================\n");
 

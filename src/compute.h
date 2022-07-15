@@ -3,16 +3,26 @@
 
 #include <stdint.h>
 
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+
+typedef int8_t s8;
+typedef int16_t s16;
+typedef int32_t s32;
+typedef int64_t s64;
+
 typedef struct Data
 {
-    uint8_t *bytes;
-    uint32_t length;
+    u8 *bytes;
+    u32 length;
 } Data;
 
 typedef struct Str
 {
     char *bytes;
-    uint32_t length;
+    u32 length;
 } Str;
 
 #define LIT_STR_TO_STRING_SLICE(str) { .bytes = str, .length = sizeof(str) - 1 }
@@ -20,19 +30,19 @@ typedef struct Str
 typedef struct StrSplitIter
 {
     char *str, *head, *delim;
-    uint32_t strLength, delimLength;
+    u32 strLength, delimLength;
 } StrSplitIter;
 
 typedef struct Vector
 {
     float *data;
-    uint32_t len;
+    u32 len;
 } Vector;
 
 typedef struct COOMatrix
 {
     float *data;
-    uint32_t *row, *col, elementNum;
+    u32 *row, *col, elementNum;
 } COOMatrix;
 
 // If in columnIndex means no data (zero) at that space
@@ -41,17 +51,23 @@ typedef struct COOMatrix
 typedef struct ELLMatrix
 {
     float *data;
-    uint32_t M, P, N, *columnIndex;
-    uint32_t elementNum;
+    u32 M, P, N, *columnIndex;
+    u32 elementNum;
 } ELLMatrix;
 
 typedef struct SELLMatrix
 {
     float *data;
-    uint32_t M, N, C;
-    uint32_t *columnIndex, *rowOffsets;
-    uint32_t elementNum;
+    u32 M, N, C;
+    u32 *columnIndex, *rowOffsets;
+    u32 elementNum;
 } SELLMatrix;
+
+typedef struct RunInformation 
+{
+    double time;
+    double gflops;
+} RunInformation;
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
