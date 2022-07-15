@@ -58,11 +58,11 @@ typedef struct VersionA
     VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSet;
 
-    VKBufferAndMemory matrixBufferAndMemory;
-    VKBufferAndMemory inVecBufferAndMemory;
-    VKBufferAndMemory outVecBufferAndMemory;
+    VKBufferAndMemory matHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
 
-    VKBufferAndMemory matrixDevice;
+    VKBufferAndMemory matDevice;
     VKBufferAndMemory inVecDevice;
     VKBufferAndMemory outVecDevice;
 
@@ -76,13 +76,13 @@ typedef struct VersionB
     VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSet;
 
-    VKBufferAndMemory matrixBufferAndMemory;
-    VKBufferAndMemory matrixFloatBufferAndMemory;
-    VKBufferAndMemory inVecBufferAndMemory;
-    VKBufferAndMemory outVecBufferAndMemory;
+    VKBufferAndMemory matHost;
+    VKBufferAndMemory matFloatHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
 
-    VKBufferAndMemory matrixDevice;
-    VKBufferAndMemory matrixFloatDevice;
+    VKBufferAndMemory matDevice;
+    VKBufferAndMemory matFloatDevice;
     VKBufferAndMemory inVecDevice;
     VKBufferAndMemory outVecDevice;
 
@@ -98,13 +98,13 @@ typedef struct VersionC
 
     VKBufferAndMemory matHeaderAndColIndexHost;
     VKBufferAndMemory matRowOffsetsHost;
-    VKBufferAndMemory matFloatDataHost;
+    VKBufferAndMemory matFloatHost;
     VKBufferAndMemory inVecHost;
     VKBufferAndMemory outVecHost;
 
     VKBufferAndMemory matHeaderAndColIndexDevice;
     VKBufferAndMemory matRowOffsetsDevice;
-    VKBufferAndMemory matFloatDataDevice;
+    VKBufferAndMemory matFloatDevice;
     VKBufferAndMemory inVecDevice;
     VKBufferAndMemory outVecDevice;
 
@@ -437,9 +437,9 @@ bindVersionADescriptorSetWithBuffers(VKState *state, VersionA *versionA)
 {
     // Bind buffer with descriptor set
     VkDescriptorBufferInfo descriptorBufferInfoArray[3] = { 0 };
-    descriptorBufferInfoArray[0].buffer = versionA->matrixDevice.buffer;
+    descriptorBufferInfoArray[0].buffer = versionA->matDevice.buffer;
     descriptorBufferInfoArray[0].offset = 0;
-    descriptorBufferInfoArray[0].range = versionA->matrixDevice.bufferSize;
+    descriptorBufferInfoArray[0].range = versionA->matDevice.bufferSize;
 
     descriptorBufferInfoArray[1].buffer = versionA->inVecDevice.buffer;
     descriptorBufferInfoArray[1].offset = 0;
@@ -479,13 +479,13 @@ bindVersionBDescriptorSetWithBuffers(VKState *state, VersionB *versionB)
 {
     // Bind buffer with descriptor set
     VkDescriptorBufferInfo descriptorBufferInfoArray[4] = { 0 };
-    descriptorBufferInfoArray[0].buffer = versionB->matrixDevice.buffer;
+    descriptorBufferInfoArray[0].buffer = versionB->matDevice.buffer;
     descriptorBufferInfoArray[0].offset = 0;
-    descriptorBufferInfoArray[0].range = versionB->matrixDevice.bufferSize;
+    descriptorBufferInfoArray[0].range = versionB->matDevice.bufferSize;
 
-    descriptorBufferInfoArray[1].buffer = versionB->matrixFloatDevice.buffer;
+    descriptorBufferInfoArray[1].buffer = versionB->matFloatDevice.buffer;
     descriptorBufferInfoArray[1].offset = 0;
-    descriptorBufferInfoArray[1].range = versionB->matrixFloatDevice.bufferSize;
+    descriptorBufferInfoArray[1].range = versionB->matFloatDevice.bufferSize;
 
     descriptorBufferInfoArray[2].buffer = versionB->inVecDevice.buffer;
     descriptorBufferInfoArray[2].offset = 0;
@@ -1093,17 +1093,17 @@ createVersionA(VKState *state, ELLMatrix *matrix)
     VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
     // Staging buffers
-    result.matrixBufferAndMemory = createBuffer(state, matrixSize, usageFlags, memoryFlags);
-    result.inVecBufferAndMemory  = createBuffer(state, vectorSize, usageFlags, memoryFlags);
-    result.outVecBufferAndMemory = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+    result.matHost = createBuffer(state, matrixSize, usageFlags, memoryFlags);
+    result.inVecHost  = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+    result.outVecHost = createBuffer(state, vectorSize, usageFlags, memoryFlags);
 
     // On device memory buffers
-    result.matrixDevice = createBuffer(state, matrixSize, usageFlags, deviceMemoryFlags);
+    result.matDevice = createBuffer(state, matrixSize, usageFlags, deviceMemoryFlags);
     result.inVecDevice  = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
     result.outVecDevice = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
 
     {
-        VKBufferAndMemory ssbo = result.matrixBufferAndMemory;
+        VKBufferAndMemory ssbo = result.matHost;
 
         void *mappedMemory = NULL;
         vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
@@ -1121,11 +1121,11 @@ createVersionA(VKState *state, ELLMatrix *matrix)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecBufferAndMemory);
+    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecHost);
 
-    copyStagingBufferToDevice(state, result.matrixBufferAndMemory, result.matrixDevice);
-    copyStagingBufferToDevice(state, result.inVecBufferAndMemory, result.inVecDevice);
-    copyStagingBufferToDevice(state, result.outVecBufferAndMemory, result.outVecDevice);
+    copyStagingBufferToDevice(state, result.matHost, result.matDevice);
+    copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
+    copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
     bindVersionADescriptorSetWithBuffers(state, &result);
     result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v1.spv", result.descriptorSetLayout);
@@ -1153,8 +1153,8 @@ runVersionA(VKState *state, VersionA *ver, ELLMatrix *matrix)
 
     printRunInfo(runInfo, ARRAY_LEN(runInfo));
 
-    copyStagingBufferToDevice(state, ver->outVecDevice, ver->outVecBufferAndMemory);
-    checkIfVectorIsSame(state, ver->outVecBufferAndMemory, expectedVector, matrix->N);
+    copyStagingBufferToDevice(state, ver->outVecDevice, ver->outVecHost);
+    checkIfVectorIsSame(state, ver->outVecHost, expectedVector, matrix->N);
 }
 
 static VersionB
@@ -1175,19 +1175,19 @@ createVersionB(VKState *state, ELLMatrix *matrix)
     VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
     // Staging buffers
-    result.matrixBufferAndMemory      = createBuffer(state, matrixSizeIntData, usageFlags, memoryFlags);
-    result.matrixFloatBufferAndMemory = createBuffer(state, matrixSizeFloatData, usageFlags, memoryFlags);
-    result.inVecBufferAndMemory       = createBuffer(state, vectorSize, usageFlags, memoryFlags);
-    result.outVecBufferAndMemory      = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+    result.matHost      = createBuffer(state, matrixSizeIntData, usageFlags, memoryFlags);
+    result.matFloatHost = createBuffer(state, matrixSizeFloatData, usageFlags, memoryFlags);
+    result.inVecHost       = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+    result.outVecHost      = createBuffer(state, vectorSize, usageFlags, memoryFlags);
 
     // On device memory buffers
-    result.matrixDevice      = createBuffer(state, matrixSizeIntData, usageFlags, deviceMemoryFlags);
-    result.matrixFloatDevice = createBuffer(state, matrixSizeFloatData, usageFlags, deviceMemoryFlags);
+    result.matDevice      = createBuffer(state, matrixSizeIntData, usageFlags, deviceMemoryFlags);
+    result.matFloatDevice = createBuffer(state, matrixSizeFloatData, usageFlags, deviceMemoryFlags);
     result.inVecDevice       = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
     result.outVecDevice      = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
 
     {
-        VKBufferAndMemory ssbo = result.matrixBufferAndMemory;
+        VKBufferAndMemory ssbo = result.matHost;
 
         void *mappedMemory = NULL;
         vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
@@ -1204,7 +1204,7 @@ createVersionB(VKState *state, ELLMatrix *matrix)
     }
 
     {
-        VKBufferAndMemory ssbo = result.matrixFloatBufferAndMemory;
+        VKBufferAndMemory ssbo = result.matFloatHost;
 
         void *mappedMemory = NULL;
         vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
@@ -1215,12 +1215,12 @@ createVersionB(VKState *state, ELLMatrix *matrix)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecBufferAndMemory);
+    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecHost);
 
-    copyStagingBufferToDevice(state, result.matrixBufferAndMemory, result.matrixDevice);
-    copyStagingBufferToDevice(state, result.matrixFloatBufferAndMemory, result.matrixFloatDevice);
-    copyStagingBufferToDevice(state, result.inVecBufferAndMemory, result.inVecDevice);
-    copyStagingBufferToDevice(state, result.outVecBufferAndMemory, result.outVecDevice);
+    copyStagingBufferToDevice(state, result.matHost, result.matDevice);
+    copyStagingBufferToDevice(state, result.matFloatHost, result.matFloatDevice);
+    copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
+    copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
     bindVersionBDescriptorSetWithBuffers(state, &result);
     result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v2.spv", result.descriptorSetLayout);
@@ -1248,8 +1248,8 @@ runVersionB(VKState *state, VersionB *ver, ELLMatrix *matrix)
 
     printRunInfo(runInfo, ARRAY_LEN(runInfo));
 
-    copyStagingBufferToDevice(state, ver->outVecDevice, ver->outVecBufferAndMemory);
-    checkIfVectorIsSame(state, ver->outVecBufferAndMemory, expectedVector, matrix->N);
+    copyStagingBufferToDevice(state, ver->outVecDevice, ver->outVecHost);
+    checkIfVectorIsSame(state, ver->outVecHost, expectedVector, matrix->N);
 }
 
 static void
@@ -1265,9 +1265,9 @@ bindVersionCDescriptorSetWithBuffers(VKState *state, VersionC *ver)
     descriptorBufferInfoArray[1].offset = 0;
     descriptorBufferInfoArray[1].range = ver->matRowOffsetsDevice.bufferSize;
 
-    descriptorBufferInfoArray[2].buffer = ver->matFloatDataDevice.buffer;
+    descriptorBufferInfoArray[2].buffer = ver->matFloatDevice.buffer;
     descriptorBufferInfoArray[2].offset = 0;
-    descriptorBufferInfoArray[2].range = ver->matFloatDataDevice.bufferSize;
+    descriptorBufferInfoArray[2].range = ver->matFloatDevice.bufferSize;
 
     descriptorBufferInfoArray[3].buffer = ver->inVecDevice.buffer;
     descriptorBufferInfoArray[3].offset = 0;
@@ -1341,14 +1341,14 @@ createVersionC(VKState *state, SELLMatrix *matrix)
     // Staging buffers
     result.matHeaderAndColIndexHost = createBuffer(state, headerSize + columnIndexSize, usageFlags, memoryFlags);
     result.matRowOffsetsHost        = createBuffer(state, rowOffsetsSize, usageFlags, memoryFlags);
-    result.matFloatDataHost         = createBuffer(state, floatDataSize, usageFlags, memoryFlags);
+    result.matFloatHost             = createBuffer(state, floatDataSize, usageFlags, memoryFlags);
     result.inVecHost                = createBuffer(state, vectorSize, usageFlags, memoryFlags);
     result.outVecHost               = createBuffer(state, vectorSize, usageFlags, memoryFlags);
 
     // On device memory buffers
     result.matHeaderAndColIndexDevice = createBuffer(state, headerSize + columnIndexSize, usageFlags, deviceMemoryFlags);
     result.matRowOffsetsDevice        = createBuffer(state, rowOffsetsSize, usageFlags, deviceMemoryFlags);
-    result.matFloatDataDevice         = createBuffer(state, floatDataSize, usageFlags, deviceMemoryFlags);
+    result.matFloatDevice             = createBuffer(state, floatDataSize, usageFlags, deviceMemoryFlags);
     result.inVecDevice                = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
     result.outVecDevice               = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
 
@@ -1379,7 +1379,7 @@ createVersionC(VKState *state, SELLMatrix *matrix)
     }
 
     {
-        VKBufferAndMemory ssbo = result.matFloatDataHost;
+        VKBufferAndMemory ssbo = result.matFloatHost;
 
         void *mappedMemory = NULL;
         vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
@@ -1392,7 +1392,7 @@ createVersionC(VKState *state, SELLMatrix *matrix)
 
     copyStagingBufferToDevice(state, result.matHeaderAndColIndexHost, result.matHeaderAndColIndexDevice);
     copyStagingBufferToDevice(state, result.matRowOffsetsHost, result.matRowOffsetsDevice);
-    copyStagingBufferToDevice(state, result.matFloatDataHost, result.matFloatDataDevice);
+    copyStagingBufferToDevice(state, result.matFloatHost, result.matFloatDevice);
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
