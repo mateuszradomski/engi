@@ -43,10 +43,6 @@ void main()
         for(uint coli = 0; coli < sliceC; coli++)
         {
             const uint cellOffset = rowOffset + coli;
-            if(columnIndex[cellOffset] == 0xffffffff) {
-                break;
-            }
-
             sum += inVec[columnIndex[cellOffset]] * floatdata[cellOffset];
         }
 

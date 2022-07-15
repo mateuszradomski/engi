@@ -963,7 +963,7 @@ ELLToSELLMatrix(ELLMatrix matrix)
 {
     SELLMatrix result = { 0 };
 
-    result.C = 4;
+    result.C = 2;
     result.M = matrix.M;
     result.N = matrix.N;
     result.elementNum = matrix.elementNum; 
@@ -994,7 +994,12 @@ ELLToSELLMatrix(ELLMatrix matrix)
         }
 
         u32 lastOffset = result.rowOffsets[i];
-        u32 currentOffset = MAX(MAX(MAX(P[0], P[1]), P[2]), P[3]) * result.C;
+        u32 currentOffset = 0;
+        for(u32 i = 0; i < result.C; i++)
+        {
+            currentOffset = MAX(P[i], currentOffset);
+        }
+        currentOffset *= result.C;
         result.rowOffsets[i+1] = currentOffset + lastOffset;
     }
 
@@ -1341,11 +1346,11 @@ createVersionC(VKState *state, SELLMatrix *matrix)
     result.outVecHost               = createBuffer(state, vectorSize, usageFlags, memoryFlags);
 
     // On device memory buffers
-    result.matHeaderAndColIndexDevice = createBuffer(state, headerSize + columnIndexSize, usageFlags, memoryFlags);
-    result.matRowOffsetsDevice        = createBuffer(state, rowOffsetsSize, usageFlags, memoryFlags);
-    result.matFloatDataDevice         = createBuffer(state, floatDataSize, usageFlags, memoryFlags);
-    result.inVecDevice                = createBuffer(state, vectorSize, usageFlags, memoryFlags);
-    result.outVecDevice               = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+    result.matHeaderAndColIndexDevice = createBuffer(state, headerSize + columnIndexSize, usageFlags, deviceMemoryFlags);
+    result.matRowOffsetsDevice        = createBuffer(state, rowOffsetsSize, usageFlags, deviceMemoryFlags);
+    result.matFloatDataDevice         = createBuffer(state, floatDataSize, usageFlags, deviceMemoryFlags);
+    result.inVecDevice                = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
+    result.outVecDevice               = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
 
     {
         VKBufferAndMemory ssbo = result.matHeaderAndColIndexHost;
