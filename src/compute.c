@@ -451,152 +451,38 @@ createBuffer(VKState *state, u32 bufferSize, VkBufferUsageFlags usageFlags, VkMe
 }
 
 static void
-bindScenarioELLSimpleDescriptorSetWithBuffers(VKState *state, ScenarioELLSimple *scnELLSimple)
+bindDescriptorSetWithBuffers(VKState *state, VkDescriptorSet descriptorSet,
+                             VKBufferAndMemory *buffers, u32 *offsets, u32 len)
 {
-    // Bind buffer with descriptor set
-    VkDescriptorBufferInfo descriptorBufferInfoArray[3] = { 0 };
-    descriptorBufferInfoArray[0].buffer = scnELLSimple->matDevice.buffer;
-    descriptorBufferInfoArray[0].offset = 0;
-    descriptorBufferInfoArray[0].range = scnELLSimple->matDevice.bufferSize;
+    u32 bufferInfoSize = len * sizeof(VkDescriptorBufferInfo);
+    VkDescriptorBufferInfo *descriptorBufferInfo = malloc(bufferInfoSize);
+    memset(descriptorBufferInfo, 0, bufferInfoSize);
 
-    descriptorBufferInfoArray[1].buffer = scnELLSimple->inVecDevice.buffer;
-    descriptorBufferInfoArray[1].offset = 0;
-    descriptorBufferInfoArray[1].range = scnELLSimple->inVecDevice.bufferSize;
+    for(u32 i = 0; i < len; i++)
+    {
+        descriptorBufferInfo[i].buffer = buffers[i].buffer;
+        descriptorBufferInfo[i].offset = offsets[i];
+        descriptorBufferInfo[i].range = buffers[i].bufferSize;
+    }
 
-    descriptorBufferInfoArray[2].buffer = scnELLSimple->outVecDevice.buffer;
-    descriptorBufferInfoArray[2].offset = 0;
-    descriptorBufferInfoArray[2].range = scnELLSimple->outVecDevice.bufferSize;
+    u32 writeDescSize = len * sizeof(VkWriteDescriptorSet);
+    VkWriteDescriptorSet *writeDescriptorSets = malloc(writeDescSize);
+    memset(writeDescriptorSets, 0, writeDescSize);
 
-    VkWriteDescriptorSet writeDescriptorSetsArray[3] = { 0 };
-    writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[0].dstSet = scnELLSimple->descriptorSet;
-    writeDescriptorSetsArray[0].dstBinding = 0;
-    writeDescriptorSetsArray[0].descriptorCount = 1;
-    writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
+    for(u32 i = 0; i < len; i++)
+    {
+        writeDescriptorSets[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeDescriptorSets[i].dstSet = descriptorSet;
+        writeDescriptorSets[i].dstBinding = i;
+        writeDescriptorSets[i].descriptorCount = 1;
+        writeDescriptorSets[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        writeDescriptorSets[i].pBufferInfo = &descriptorBufferInfo[i];
+    }
 
-    writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[1].dstSet = scnELLSimple->descriptorSet;
-    writeDescriptorSetsArray[1].dstBinding = 1;
-    writeDescriptorSetsArray[1].descriptorCount = 1;
-    writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
+    vkUpdateDescriptorSets(state->device, len, writeDescriptorSets, 0, NULL);
 
-    writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[2].dstSet = scnELLSimple->descriptorSet;
-    writeDescriptorSetsArray[2].dstBinding = 2;
-    writeDescriptorSetsArray[2].descriptorCount = 1;
-    writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[2].pBufferInfo = &descriptorBufferInfoArray[2];
-
-    vkUpdateDescriptorSets(state->device, ARRAY_LEN(writeDescriptorSetsArray), writeDescriptorSetsArray, 0, NULL);
-}
-
-static void
-bindScenarioELLBufferOffsetDescriptorSetWithBuffers(VKState *state, ScenarioELLBufferOffset *scn, u32 floatOffset)
-{
-    // Bind buffer with descriptor set
-    VkDescriptorBufferInfo descriptorBufferInfoArray[4] = { 0 };
-    descriptorBufferInfoArray[0].buffer = scn->matDevice.buffer;
-    descriptorBufferInfoArray[0].offset = 0;
-    descriptorBufferInfoArray[0].range = scn->matDevice.bufferSize;
-
-    descriptorBufferInfoArray[1].buffer = scn->matDevice.buffer;
-    descriptorBufferInfoArray[1].offset = floatOffset;
-    descriptorBufferInfoArray[1].range = scn->matDevice.bufferSize;
-
-    descriptorBufferInfoArray[2].buffer = scn->inVecDevice.buffer;
-    descriptorBufferInfoArray[2].offset = 0;
-    descriptorBufferInfoArray[2].range = scn->inVecDevice.bufferSize;
-
-    descriptorBufferInfoArray[3].buffer = scn->outVecDevice.buffer;
-    descriptorBufferInfoArray[3].offset = 0;
-    descriptorBufferInfoArray[3].range = scn->outVecDevice.bufferSize;
-
-    VkWriteDescriptorSet writeDescriptorSetsArray[4] = { 0 };
-    writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[0].dstSet = scn->descriptorSet;
-    writeDescriptorSetsArray[0].dstBinding = 0;
-    writeDescriptorSetsArray[0].descriptorCount = 1;
-    writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
-
-    writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[1].dstSet = scn->descriptorSet;
-    writeDescriptorSetsArray[1].dstBinding = 1;
-    writeDescriptorSetsArray[1].descriptorCount = 1;
-    writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
-
-    writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[2].dstSet = scn->descriptorSet;
-    writeDescriptorSetsArray[2].dstBinding = 2;
-    writeDescriptorSetsArray[2].descriptorCount = 1;
-    writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[2].pBufferInfo = &descriptorBufferInfoArray[2];
-
-    writeDescriptorSetsArray[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[3].dstSet = scn->descriptorSet;
-    writeDescriptorSetsArray[3].dstBinding = 3;
-    writeDescriptorSetsArray[3].descriptorCount = 1;
-    writeDescriptorSetsArray[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[3].pBufferInfo = &descriptorBufferInfoArray[3];
-
-    vkUpdateDescriptorSets(state->device, ARRAY_LEN(writeDescriptorSetsArray), writeDescriptorSetsArray, 0, NULL);
-}
-
-
-static void
-bindScenarioELL2BufferDescriptorSetWithBuffers(VKState *state, ScenarioELL2Buffer *scnELL2Buffer)
-{
-    // Bind buffer with descriptor set
-    VkDescriptorBufferInfo descriptorBufferInfoArray[4] = { 0 };
-    descriptorBufferInfoArray[0].buffer = scnELL2Buffer->matDevice.buffer;
-    descriptorBufferInfoArray[0].offset = 0;
-    descriptorBufferInfoArray[0].range = scnELL2Buffer->matDevice.bufferSize;
-
-    descriptorBufferInfoArray[1].buffer = scnELL2Buffer->matFloatDevice.buffer;
-    descriptorBufferInfoArray[1].offset = 0;
-    descriptorBufferInfoArray[1].range = scnELL2Buffer->matFloatDevice.bufferSize;
-
-    descriptorBufferInfoArray[2].buffer = scnELL2Buffer->inVecDevice.buffer;
-    descriptorBufferInfoArray[2].offset = 0;
-    descriptorBufferInfoArray[2].range = scnELL2Buffer->inVecDevice.bufferSize;
-
-    descriptorBufferInfoArray[3].buffer = scnELL2Buffer->outVecDevice.buffer;
-    descriptorBufferInfoArray[3].offset = 0;
-    descriptorBufferInfoArray[3].range = scnELL2Buffer->outVecDevice.bufferSize;
-
-    VkWriteDescriptorSet writeDescriptorSetsArray[4] = { 0 };
-    writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[0].dstSet = scnELL2Buffer->descriptorSet;
-    writeDescriptorSetsArray[0].dstBinding = 0;
-    writeDescriptorSetsArray[0].descriptorCount = 1;
-    writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
-
-    writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[1].dstSet = scnELL2Buffer->descriptorSet;
-    writeDescriptorSetsArray[1].dstBinding = 1;
-    writeDescriptorSetsArray[1].descriptorCount = 1;
-    writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
-
-    writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[2].dstSet = scnELL2Buffer->descriptorSet;
-    writeDescriptorSetsArray[2].dstBinding = 2;
-    writeDescriptorSetsArray[2].descriptorCount = 1;
-    writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[2].pBufferInfo = &descriptorBufferInfoArray[2];
-
-    writeDescriptorSetsArray[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[3].dstSet = scnELL2Buffer->descriptorSet;
-    writeDescriptorSetsArray[3].dstBinding = 3;
-    writeDescriptorSetsArray[3].descriptorCount = 1;
-    writeDescriptorSetsArray[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[3].pBufferInfo = &descriptorBufferInfoArray[3];
-
-    vkUpdateDescriptorSets(state->device, ARRAY_LEN(writeDescriptorSetsArray), writeDescriptorSetsArray, 0, NULL);
+    free(descriptorBufferInfo);
+    free(writeDescriptorSets);
 }
 
 static void
@@ -1199,7 +1085,15 @@ createScenarioELLSimple(VKState *state, ELLMatrix *matrix)
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
-    bindScenarioELLSimpleDescriptorSetWithBuffers(state, &result);
+    VKBufferAndMemory buffers[] = { 
+        result.matDevice,
+        result.inVecDevice,
+        result.outVecDevice
+    };
+    u32 offsets[] = { 0, 0, 0 };
+
+    bindDescriptorSetWithBuffers(state, result.descriptorSet, buffers, offsets, ARRAY_LEN(buffers));
+
     result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v1.spv", result.descriptorSetLayout);
 
     return result;
@@ -1280,8 +1174,16 @@ createScenarioELLBufferOffset(VKState *state, ELLMatrix *matrix)
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
+    VKBufferAndMemory buffers[] = { 
+        result.matDevice,
+        result.matDevice,
+        result.inVecDevice,
+        result.outVecDevice
+    };
     u32 floatOffset = 3 * sizeof(matrix->P) + (matrix->M * matrix->P * sizeof(matrix->columnIndex[0]));
-    bindScenarioELLBufferOffsetDescriptorSetWithBuffers(state, &result, floatOffset);
+    u32 offsets[] = { 0, floatOffset, 0, 0 };
+    bindDescriptorSetWithBuffers(state, result.descriptorSet, buffers, offsets, ARRAY_LEN(buffers));
+
     result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v2.spv", result.descriptorSetLayout);
 
     return result;
@@ -1376,7 +1278,15 @@ createScenarioELL2Buffer(VKState *state, ELLMatrix *matrix)
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
-    bindScenarioELL2BufferDescriptorSetWithBuffers(state, &result);
+    VKBufferAndMemory buffers[] = { 
+        result.matDevice,
+        result.matFloatDevice,
+        result.inVecDevice,
+        result.outVecDevice
+    };
+    u32 offsets[] = { 0, 0, 0, 0 };
+    bindDescriptorSetWithBuffers(state, result.descriptorSet, buffers, offsets, ARRAY_LEN(buffers));
+
     result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v2.spv", result.descriptorSetLayout);
 
     return result;
@@ -1404,70 +1314,6 @@ runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, ELLMatrix *matrix
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
-}
-
-static void
-bindScenarioSELLDescriptorSetWithBuffers(VKState *state, ScenarioSELL *scn)
-{
-    // Bind buffer with descriptor set
-    VkDescriptorBufferInfo descriptorBufferInfoArray[5] = { 0 };
-    descriptorBufferInfoArray[0].buffer = scn->matHeaderAndColIndexDevice.buffer;
-    descriptorBufferInfoArray[0].offset = 0;
-    descriptorBufferInfoArray[0].range = scn->matHeaderAndColIndexDevice.bufferSize;
-
-    descriptorBufferInfoArray[1].buffer = scn->matRowOffsetsDevice.buffer;
-    descriptorBufferInfoArray[1].offset = 0;
-    descriptorBufferInfoArray[1].range = scn->matRowOffsetsDevice.bufferSize;
-
-    descriptorBufferInfoArray[2].buffer = scn->matFloatDevice.buffer;
-    descriptorBufferInfoArray[2].offset = 0;
-    descriptorBufferInfoArray[2].range = scn->matFloatDevice.bufferSize;
-
-    descriptorBufferInfoArray[3].buffer = scn->inVecDevice.buffer;
-    descriptorBufferInfoArray[3].offset = 0;
-    descriptorBufferInfoArray[3].range = scn->inVecDevice.bufferSize;
-
-    descriptorBufferInfoArray[4].buffer = scn->outVecDevice.buffer;
-    descriptorBufferInfoArray[4].offset = 0;
-    descriptorBufferInfoArray[4].range = scn->outVecDevice.bufferSize;
-
-    VkWriteDescriptorSet writeDescriptorSetsArray[5] = { 0 };
-    writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[0].dstSet = scn->descriptorSet;
-    writeDescriptorSetsArray[0].dstBinding = 0;
-    writeDescriptorSetsArray[0].descriptorCount = 1;
-    writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
-
-    writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[1].dstSet = scn->descriptorSet;
-    writeDescriptorSetsArray[1].dstBinding = 1;
-    writeDescriptorSetsArray[1].descriptorCount = 1;
-    writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
-
-    writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[2].dstSet = scn->descriptorSet;
-    writeDescriptorSetsArray[2].dstBinding = 2;
-    writeDescriptorSetsArray[2].descriptorCount = 1;
-    writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[2].pBufferInfo = &descriptorBufferInfoArray[2];
-
-    writeDescriptorSetsArray[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[3].dstSet = scn->descriptorSet;
-    writeDescriptorSetsArray[3].dstBinding = 3;
-    writeDescriptorSetsArray[3].descriptorCount = 1;
-    writeDescriptorSetsArray[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[3].pBufferInfo = &descriptorBufferInfoArray[3];
-
-    writeDescriptorSetsArray[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[4].dstSet = scn->descriptorSet;
-    writeDescriptorSetsArray[4].dstBinding = 4;
-    writeDescriptorSetsArray[4].descriptorCount = 1;
-    writeDescriptorSetsArray[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writeDescriptorSetsArray[4].pBufferInfo = &descriptorBufferInfoArray[4];
-
-    vkUpdateDescriptorSets(state->device, ARRAY_LEN(writeDescriptorSetsArray), writeDescriptorSetsArray, 0, NULL);
 }
 
 static ScenarioSELL
@@ -1550,7 +1396,16 @@ createScenarioSELL(VKState *state, SELLMatrix *matrix)
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
-    bindScenarioSELLDescriptorSetWithBuffers(state, &result);
+    VKBufferAndMemory buffers[] = { 
+        result.matHeaderAndColIndexDevice,
+        result.matRowOffsetsDevice,
+        result.matFloatDevice,
+        result.inVecDevice,
+        result.outVecDevice
+    };
+    u32 offsets[] = { 0, 0, 0, 0, 0 };
+    bindDescriptorSetWithBuffers(state, result.descriptorSet, buffers, offsets, ARRAY_LEN(buffers));
+
     result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v3.spv", result.descriptorSetLayout);
 
     return result;
