@@ -52,7 +52,7 @@ typedef struct VKState
     VkCommandPool commandPool;
 } VKState;
 
-typedef struct VersionA
+typedef struct ScenarioELLSimple
 {
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
@@ -68,9 +68,9 @@ typedef struct VersionA
 
     VKPipelineDefinition pipelineDefinition;
     VkCommandBuffer commandBuffer;
-} VersionA;
+} ScenarioELLSimple;
 
-typedef struct VersionB
+typedef struct ScenarioELL2Buffer
 {
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
@@ -88,9 +88,9 @@ typedef struct VersionB
 
     VKPipelineDefinition pipelineDefinition;
     VkCommandBuffer commandBuffer;
-} VersionB;
+} ScenarioELL2Buffer;
 
-typedef struct VersionC
+typedef struct ScenarioSELL
 {
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
@@ -110,7 +110,7 @@ typedef struct VersionC
 
     VKPipelineDefinition pipelineDefinition;
     VkCommandBuffer commandBuffer;
-} VersionC;
+} ScenarioSELL;
 
 #define VK_CALL(f) 																				        \
 {																										\
@@ -433,39 +433,39 @@ createBuffer(VKState *state, u32 bufferSize, VkBufferUsageFlags usageFlags, VkMe
 }
 
 static void
-bindVersionADescriptorSetWithBuffers(VKState *state, VersionA *versionA)
+bindScenarioELLSimpleDescriptorSetWithBuffers(VKState *state, ScenarioELLSimple *scnELLSimple)
 {
     // Bind buffer with descriptor set
     VkDescriptorBufferInfo descriptorBufferInfoArray[3] = { 0 };
-    descriptorBufferInfoArray[0].buffer = versionA->matDevice.buffer;
+    descriptorBufferInfoArray[0].buffer = scnELLSimple->matDevice.buffer;
     descriptorBufferInfoArray[0].offset = 0;
-    descriptorBufferInfoArray[0].range = versionA->matDevice.bufferSize;
+    descriptorBufferInfoArray[0].range = scnELLSimple->matDevice.bufferSize;
 
-    descriptorBufferInfoArray[1].buffer = versionA->inVecDevice.buffer;
+    descriptorBufferInfoArray[1].buffer = scnELLSimple->inVecDevice.buffer;
     descriptorBufferInfoArray[1].offset = 0;
-    descriptorBufferInfoArray[1].range = versionA->inVecDevice.bufferSize;
+    descriptorBufferInfoArray[1].range = scnELLSimple->inVecDevice.bufferSize;
 
-    descriptorBufferInfoArray[2].buffer = versionA->outVecDevice.buffer;
+    descriptorBufferInfoArray[2].buffer = scnELLSimple->outVecDevice.buffer;
     descriptorBufferInfoArray[2].offset = 0;
-    descriptorBufferInfoArray[2].range = versionA->outVecDevice.bufferSize;
+    descriptorBufferInfoArray[2].range = scnELLSimple->outVecDevice.bufferSize;
 
     VkWriteDescriptorSet writeDescriptorSetsArray[3] = { 0 };
     writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[0].dstSet = versionA->descriptorSet;
+    writeDescriptorSetsArray[0].dstSet = scnELLSimple->descriptorSet;
     writeDescriptorSetsArray[0].dstBinding = 0;
     writeDescriptorSetsArray[0].descriptorCount = 1;
     writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
 
     writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[1].dstSet = versionA->descriptorSet;
+    writeDescriptorSetsArray[1].dstSet = scnELLSimple->descriptorSet;
     writeDescriptorSetsArray[1].dstBinding = 1;
     writeDescriptorSetsArray[1].descriptorCount = 1;
     writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
 
     writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[2].dstSet = versionA->descriptorSet;
+    writeDescriptorSetsArray[2].dstSet = scnELLSimple->descriptorSet;
     writeDescriptorSetsArray[2].dstBinding = 2;
     writeDescriptorSetsArray[2].descriptorCount = 1;
     writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -475,50 +475,50 @@ bindVersionADescriptorSetWithBuffers(VKState *state, VersionA *versionA)
 }
 
 static void
-bindVersionBDescriptorSetWithBuffers(VKState *state, VersionB *versionB)
+bindScenarioELL2BufferDescriptorSetWithBuffers(VKState *state, ScenarioELL2Buffer *scnELL2Buffer)
 {
     // Bind buffer with descriptor set
     VkDescriptorBufferInfo descriptorBufferInfoArray[4] = { 0 };
-    descriptorBufferInfoArray[0].buffer = versionB->matDevice.buffer;
+    descriptorBufferInfoArray[0].buffer = scnELL2Buffer->matDevice.buffer;
     descriptorBufferInfoArray[0].offset = 0;
-    descriptorBufferInfoArray[0].range = versionB->matDevice.bufferSize;
+    descriptorBufferInfoArray[0].range = scnELL2Buffer->matDevice.bufferSize;
 
-    descriptorBufferInfoArray[1].buffer = versionB->matFloatDevice.buffer;
+    descriptorBufferInfoArray[1].buffer = scnELL2Buffer->matFloatDevice.buffer;
     descriptorBufferInfoArray[1].offset = 0;
-    descriptorBufferInfoArray[1].range = versionB->matFloatDevice.bufferSize;
+    descriptorBufferInfoArray[1].range = scnELL2Buffer->matFloatDevice.bufferSize;
 
-    descriptorBufferInfoArray[2].buffer = versionB->inVecDevice.buffer;
+    descriptorBufferInfoArray[2].buffer = scnELL2Buffer->inVecDevice.buffer;
     descriptorBufferInfoArray[2].offset = 0;
-    descriptorBufferInfoArray[2].range = versionB->inVecDevice.bufferSize;
+    descriptorBufferInfoArray[2].range = scnELL2Buffer->inVecDevice.bufferSize;
 
-    descriptorBufferInfoArray[3].buffer = versionB->outVecDevice.buffer;
+    descriptorBufferInfoArray[3].buffer = scnELL2Buffer->outVecDevice.buffer;
     descriptorBufferInfoArray[3].offset = 0;
-    descriptorBufferInfoArray[3].range = versionB->outVecDevice.bufferSize;
+    descriptorBufferInfoArray[3].range = scnELL2Buffer->outVecDevice.bufferSize;
 
     VkWriteDescriptorSet writeDescriptorSetsArray[4] = { 0 };
     writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[0].dstSet = versionB->descriptorSet;
+    writeDescriptorSetsArray[0].dstSet = scnELL2Buffer->descriptorSet;
     writeDescriptorSetsArray[0].dstBinding = 0;
     writeDescriptorSetsArray[0].descriptorCount = 1;
     writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
 
     writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[1].dstSet = versionB->descriptorSet;
+    writeDescriptorSetsArray[1].dstSet = scnELL2Buffer->descriptorSet;
     writeDescriptorSetsArray[1].dstBinding = 1;
     writeDescriptorSetsArray[1].descriptorCount = 1;
     writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
 
     writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[2].dstSet = versionB->descriptorSet;
+    writeDescriptorSetsArray[2].dstSet = scnELL2Buffer->descriptorSet;
     writeDescriptorSetsArray[2].dstBinding = 2;
     writeDescriptorSetsArray[2].descriptorCount = 1;
     writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writeDescriptorSetsArray[2].pBufferInfo = &descriptorBufferInfoArray[2];
 
     writeDescriptorSetsArray[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[3].dstSet = versionB->descriptorSet;
+    writeDescriptorSetsArray[3].dstSet = scnELL2Buffer->descriptorSet;
     writeDescriptorSetsArray[3].dstBinding = 3;
     writeDescriptorSetsArray[3].descriptorCount = 1;
     writeDescriptorSetsArray[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -1076,10 +1076,10 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, const float *expecte
     printf("[Vector match check]: Pass!\n");
 }
 
-static VersionA
-createVersionA(VKState *state, ELLMatrix *matrix)
+static ScenarioELLSimple
+createScenarioELLSimple(VKState *state, ELLMatrix *matrix)
 {
-    VersionA result = { 0 };
+    ScenarioELLSimple result = { 0 };
 
     result.descriptorSetLayout = createConsecutiveDescriptorSetLayout(state->device, 3);
     result.descriptorPool = createDescriptorPool(state->device);
@@ -1127,40 +1127,40 @@ createVersionA(VKState *state, ELLMatrix *matrix)
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
-    bindVersionADescriptorSetWithBuffers(state, &result);
+    bindScenarioELLSimpleDescriptorSetWithBuffers(state, &result);
     result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v1.spv", result.descriptorSetLayout);
 
     return result;
 }
 
 static void
-runVersionA(VKState *state, VersionA *ver, ELLMatrix *matrix)
+runScenarioELLSimple(VKState *state, ScenarioELLSimple *scn, ELLMatrix *matrix)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
     u32 dispatchZ = 1;
 
-    ver->commandBuffer = createCommandBuffer(state, &ver->pipelineDefinition, &ver->descriptorSet,
+    scn->commandBuffer = createCommandBuffer(state, &scn->pipelineDefinition, &scn->descriptorSet,
                                              dispatchX, dispatchY, dispatchZ);
 
     RunInformation runInfo[RUNS_PER_VERSION] = { 0 };
     for(u32 i = 0; i < RUNS_PER_VERSION; i++)
     {
         u32 nonZeroCount = matrix->elementNum;
-        runInfo[i].time = runCommandBuffer(state, &ver->commandBuffer);
+        runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
         runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
     }
 
     printRunInfo(runInfo, ARRAY_LEN(runInfo));
 
-    copyStagingBufferToDevice(state, ver->outVecDevice, ver->outVecHost);
-    checkIfVectorIsSame(state, ver->outVecHost, expectedVector, matrix->N);
+    copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
+    checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
 }
 
-static VersionB
-createVersionB(VKState *state, ELLMatrix *matrix)
+static ScenarioELL2Buffer
+createScenarioELL2Buffer(VKState *state, ELLMatrix *matrix)
 {
-    VersionB result = { 0 };
+    ScenarioELL2Buffer result = { 0 };
 
     result.descriptorSetLayout = createConsecutiveDescriptorSetLayout(state->device, 4);
     result.descriptorPool = createDescriptorPool(state->device);
@@ -1222,92 +1222,92 @@ createVersionB(VKState *state, ELLMatrix *matrix)
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
-    bindVersionBDescriptorSetWithBuffers(state, &result);
+    bindScenarioELL2BufferDescriptorSetWithBuffers(state, &result);
     result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v2.spv", result.descriptorSetLayout);
 
     return result;
 }
 
 static void
-runVersionB(VKState *state, VersionB *ver, ELLMatrix *matrix)
+runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, ELLMatrix *matrix)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
     u32 dispatchZ = 1;
 
-    ver->commandBuffer = createCommandBuffer(state, &ver->pipelineDefinition, &ver->descriptorSet,
+    scn->commandBuffer = createCommandBuffer(state, &scn->pipelineDefinition, &scn->descriptorSet,
                                              dispatchX, dispatchY, dispatchZ);
 
     RunInformation runInfo[RUNS_PER_VERSION] = { 0 };
     for(u32 i = 0; i < RUNS_PER_VERSION; i++)
     {
         u32 nonZeroCount = matrix->elementNum;
-        runInfo[i].time = runCommandBuffer(state, &ver->commandBuffer);
+        runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
         runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
     }
 
     printRunInfo(runInfo, ARRAY_LEN(runInfo));
 
-    copyStagingBufferToDevice(state, ver->outVecDevice, ver->outVecHost);
-    checkIfVectorIsSame(state, ver->outVecHost, expectedVector, matrix->N);
+    copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
+    checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
 }
 
 static void
-bindVersionCDescriptorSetWithBuffers(VKState *state, VersionC *ver)
+bindScenarioSELLDescriptorSetWithBuffers(VKState *state, ScenarioSELL *scn)
 {
     // Bind buffer with descriptor set
     VkDescriptorBufferInfo descriptorBufferInfoArray[5] = { 0 };
-    descriptorBufferInfoArray[0].buffer = ver->matHeaderAndColIndexDevice.buffer;
+    descriptorBufferInfoArray[0].buffer = scn->matHeaderAndColIndexDevice.buffer;
     descriptorBufferInfoArray[0].offset = 0;
-    descriptorBufferInfoArray[0].range = ver->matHeaderAndColIndexDevice.bufferSize;
+    descriptorBufferInfoArray[0].range = scn->matHeaderAndColIndexDevice.bufferSize;
 
-    descriptorBufferInfoArray[1].buffer = ver->matRowOffsetsDevice.buffer;
+    descriptorBufferInfoArray[1].buffer = scn->matRowOffsetsDevice.buffer;
     descriptorBufferInfoArray[1].offset = 0;
-    descriptorBufferInfoArray[1].range = ver->matRowOffsetsDevice.bufferSize;
+    descriptorBufferInfoArray[1].range = scn->matRowOffsetsDevice.bufferSize;
 
-    descriptorBufferInfoArray[2].buffer = ver->matFloatDevice.buffer;
+    descriptorBufferInfoArray[2].buffer = scn->matFloatDevice.buffer;
     descriptorBufferInfoArray[2].offset = 0;
-    descriptorBufferInfoArray[2].range = ver->matFloatDevice.bufferSize;
+    descriptorBufferInfoArray[2].range = scn->matFloatDevice.bufferSize;
 
-    descriptorBufferInfoArray[3].buffer = ver->inVecDevice.buffer;
+    descriptorBufferInfoArray[3].buffer = scn->inVecDevice.buffer;
     descriptorBufferInfoArray[3].offset = 0;
-    descriptorBufferInfoArray[3].range = ver->inVecDevice.bufferSize;
+    descriptorBufferInfoArray[3].range = scn->inVecDevice.bufferSize;
 
-    descriptorBufferInfoArray[4].buffer = ver->outVecDevice.buffer;
+    descriptorBufferInfoArray[4].buffer = scn->outVecDevice.buffer;
     descriptorBufferInfoArray[4].offset = 0;
-    descriptorBufferInfoArray[4].range = ver->outVecDevice.bufferSize;
+    descriptorBufferInfoArray[4].range = scn->outVecDevice.bufferSize;
 
     VkWriteDescriptorSet writeDescriptorSetsArray[5] = { 0 };
     writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[0].dstSet = ver->descriptorSet;
+    writeDescriptorSetsArray[0].dstSet = scn->descriptorSet;
     writeDescriptorSetsArray[0].dstBinding = 0;
     writeDescriptorSetsArray[0].descriptorCount = 1;
     writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
 
     writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[1].dstSet = ver->descriptorSet;
+    writeDescriptorSetsArray[1].dstSet = scn->descriptorSet;
     writeDescriptorSetsArray[1].dstBinding = 1;
     writeDescriptorSetsArray[1].descriptorCount = 1;
     writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
 
     writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[2].dstSet = ver->descriptorSet;
+    writeDescriptorSetsArray[2].dstSet = scn->descriptorSet;
     writeDescriptorSetsArray[2].dstBinding = 2;
     writeDescriptorSetsArray[2].descriptorCount = 1;
     writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writeDescriptorSetsArray[2].pBufferInfo = &descriptorBufferInfoArray[2];
 
     writeDescriptorSetsArray[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[3].dstSet = ver->descriptorSet;
+    writeDescriptorSetsArray[3].dstSet = scn->descriptorSet;
     writeDescriptorSetsArray[3].dstBinding = 3;
     writeDescriptorSetsArray[3].descriptorCount = 1;
     writeDescriptorSetsArray[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writeDescriptorSetsArray[3].pBufferInfo = &descriptorBufferInfoArray[3];
 
     writeDescriptorSetsArray[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writeDescriptorSetsArray[4].dstSet = ver->descriptorSet;
+    writeDescriptorSetsArray[4].dstSet = scn->descriptorSet;
     writeDescriptorSetsArray[4].dstBinding = 4;
     writeDescriptorSetsArray[4].descriptorCount = 1;
     writeDescriptorSetsArray[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -1316,10 +1316,10 @@ bindVersionCDescriptorSetWithBuffers(VKState *state, VersionC *ver)
     vkUpdateDescriptorSets(state->device, ARRAY_LEN(writeDescriptorSetsArray), writeDescriptorSetsArray, 0, NULL);
 }
 
-static VersionC
-createVersionC(VKState *state, SELLMatrix *matrix)
+static ScenarioSELL
+createScenarioSELL(VKState *state, SELLMatrix *matrix)
 {
-    VersionC result = { 0 };
+    ScenarioSELL result = { 0 };
 
     result.descriptorSetLayout = createConsecutiveDescriptorSetLayout(state->device, 5);
     result.descriptorPool = createDescriptorPool(state->device);
@@ -1396,34 +1396,34 @@ createVersionC(VKState *state, SELLMatrix *matrix)
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
-    bindVersionCDescriptorSetWithBuffers(state, &result);
+    bindScenarioSELLDescriptorSetWithBuffers(state, &result);
     result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v3.spv", result.descriptorSetLayout);
 
     return result;
 }
 
 static void
-runVersionC(VKState *state, VersionC *ver, SELLMatrix *matrix)
+runScenarioSELL(VKState *state, ScenarioSELL *scn, SELLMatrix *matrix)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
     u32 dispatchZ = 1;
 
-    ver->commandBuffer = createCommandBuffer(state, &ver->pipelineDefinition, &ver->descriptorSet,
+    scn->commandBuffer = createCommandBuffer(state, &scn->pipelineDefinition, &scn->descriptorSet,
                                              dispatchX, dispatchY, dispatchZ);
 
     RunInformation runInfo[RUNS_PER_VERSION] = { 0 };
     for(u32 i = 0; i < RUNS_PER_VERSION; i++)
     {
         u32 nonZeroCount = matrix->elementNum;
-        runInfo[i].time = runCommandBuffer(state, &ver->commandBuffer);
+        runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
         runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
     }
 
     printRunInfo(runInfo, ARRAY_LEN(runInfo));
 
-    copyStagingBufferToDevice(state, ver->outVecDevice, ver->outVecHost);
-    checkIfVectorIsSame(state, ver->outVecHost, expectedVector, matrix->N);
+    copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
+    checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
 }
 
 int main()
@@ -1436,18 +1436,18 @@ int main()
 
     printf("========================================\n");
 
-    VersionA versionA = createVersionA(&state, &bcsstk30ELL);
-    runVersionA(&state, &versionA, &bcsstk30ELL);
+    ScenarioELLSimple scnELLSimple = createScenarioELLSimple(&state, &bcsstk30ELL);
+    runScenarioELLSimple(&state, &scnELLSimple, &bcsstk30ELL);
 
     printf("========================================\n");
 
-    VersionB versionB = createVersionB(&state, &bcsstk30ELL);
-    runVersionB(&state, &versionB, &bcsstk30ELL);
+    ScenarioELL2Buffer scnELL2Buffer = createScenarioELL2Buffer(&state, &bcsstk30ELL);
+    runScenarioELL2Buffer(&state, &scnELL2Buffer, &bcsstk30ELL);
 
     printf("========================================\n");
 
-    VersionC versionC = createVersionC(&state, &bcsstk30SELL);
-    runVersionC(&state, &versionC, &bcsstk30SELL);
+    ScenarioSELL scnSELL = createScenarioSELL(&state, &bcsstk30SELL);
+    runScenarioSELL(&state, &scnSELL, &bcsstk30SELL);
 
     printf("========================================\n");
 
