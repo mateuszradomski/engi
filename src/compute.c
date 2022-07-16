@@ -130,6 +130,24 @@ typedef struct ScenarioSELL
     VkCommandBuffer commandBuffer;
 } ScenarioSELL;
 
+typedef struct ScenarioSELLOffsets
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioSELLOffsets;
+
 #define VK_CALL(f) 																				        \
 {																										\
     VkResult res = (f);																					\
@@ -1435,6 +1453,104 @@ runScenarioSELL(VKState *state, ScenarioSELL *scn, SELLMatrix *matrix)
     checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
 }
 
+static ScenarioSELLOffsets
+createScenarioSELLOffsets(VKState *state, SELLMatrix *matrix)
+{
+    ScenarioSELLOffsets result = { 0 };
+
+    result.descriptorSetLayout = createConsecutiveDescriptorSetLayout(state->device, 5);
+    result.descriptorPool = createDescriptorPool(state->device);
+    result.descriptorSet = createDescriptorSet(state->device, result.descriptorSetLayout, result.descriptorPool);
+
+    u32 sliceCount        = DIV_CEIL(matrix->M, matrix->C);
+    u32 elementsAllocated = matrix->rowOffsets[sliceCount];
+
+    u32 headerSize      = 3*sizeof(u32);
+    u32 columnIndexSize = elementsAllocated * sizeof(matrix->columnIndex[0]);
+    u32 rowOffsetsSize  = (sliceCount+1) * sizeof(matrix->rowOffsets[0]);
+    u32 floatDataSize   = elementsAllocated * sizeof(matrix->data[0]);
+    u32 matSize         = headerSize + columnIndexSize + rowOffsetsSize + floatDataSize;
+    u32 vectorSize      = matrix->N*sizeof(matrix->data[0]);
+
+    VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    // Staging buffers
+    result.matHost    = createBuffer(state, matSize, usageFlags, memoryFlags);
+    result.inVecHost  = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+    result.outVecHost = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+
+    // On device memory buffers
+    result.matDevice    = createBuffer(state, matSize, usageFlags, deviceMemoryFlags);
+    result.inVecDevice  = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
+    result.outVecDevice = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
+
+    {
+        VKBufferAndMemory ssbo = result.matHost;
+
+        void *mappedMemory = NULL;
+        vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+        u32 *u32MappedMemory = (u32 *)mappedMemory;
+        u32MappedMemory[0] = matrix->M;
+        u32MappedMemory[1] = matrix->C;
+        u32MappedMemory[2] = matrix->N;
+        u8 *data = (u8 *)(u32MappedMemory + 3);
+
+        memcpy(data, matrix->columnIndex, columnIndexSize);
+        data += columnIndexSize;
+        memcpy(data, matrix->rowOffsets, rowOffsetsSize);
+        data += rowOffsetsSize;
+        memcpy(data, matrix->data, floatDataSize);
+
+        vkUnmapMemory(state->device, ssbo.bufferMemory);
+    }
+
+    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecHost);
+
+    copyStagingBufferToDevice(state, result.matHost, result.matDevice);
+    copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
+    copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
+
+    VKBufferAndMemory buffers[] = { 
+        result.matDevice,
+        result.matDevice,
+        result.matDevice,
+        result.inVecDevice,
+        result.outVecDevice
+    };
+    u32 offsets[] = { 0, columnIndexSize + headerSize, columnIndexSize + headerSize + rowOffsetsSize, 0, 0 };
+    bindDescriptorSetWithBuffers(state, result.descriptorSet, buffers, offsets, ARRAY_LEN(buffers));
+
+    result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v3.spv", result.descriptorSetLayout);
+
+    return result;
+}
+
+static void
+runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, SELLMatrix *matrix)
+{
+    u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
+    u32 dispatchY = 1;
+    u32 dispatchZ = 1;
+
+    scn->commandBuffer = createCommandBuffer(state, &scn->pipelineDefinition, &scn->descriptorSet,
+                                             dispatchX, dispatchY, dispatchZ);
+
+    RunInformation runInfo[RUNS_PER_VERSION] = { 0 };
+    for(u32 i = 0; i < RUNS_PER_VERSION; i++)
+    {
+        u32 nonZeroCount = matrix->elementNum;
+        runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
+        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
+    }
+
+    printRunInfo(runInfo, ARRAY_LEN(runInfo));
+
+    copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
+    checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
+}
+
 int main()
 {
     COOMatrix bcsstk30COO = ReadMatrixFormatToCOO("data/bcsstk30.mtx");
@@ -1462,6 +1578,11 @@ int main()
 
     ScenarioSELL scnSELL = createScenarioSELL(&state, &bcsstk30SELL);
     runScenarioSELL(&state, &scnSELL, &bcsstk30SELL);
+
+    printf("=== [SELL Offsets] ======================\n");
+
+    ScenarioSELLOffsets scnSELLOffsets = createScenarioSELLOffsets(&state, &bcsstk30SELL);
+    runScenarioSELLOffsets(&state, &scnSELLOffsets, &bcsstk30SELL);
 
     printf("========================================\n");
 
