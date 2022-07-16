@@ -70,6 +70,24 @@ typedef struct ScenarioELLSimple
     VkCommandBuffer commandBuffer;
 } ScenarioELLSimple;
 
+typedef struct ScenarioELLBufferOffset
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioELLBufferOffset;
+
 typedef struct ScenarioELL2Buffer
 {
     VkDescriptorSetLayout descriptorSetLayout;
@@ -473,6 +491,60 @@ bindScenarioELLSimpleDescriptorSetWithBuffers(VKState *state, ScenarioELLSimple 
 
     vkUpdateDescriptorSets(state->device, ARRAY_LEN(writeDescriptorSetsArray), writeDescriptorSetsArray, 0, NULL);
 }
+
+static void
+bindScenarioELLBufferOffsetDescriptorSetWithBuffers(VKState *state, ScenarioELLBufferOffset *scn, u32 floatOffset)
+{
+    // Bind buffer with descriptor set
+    VkDescriptorBufferInfo descriptorBufferInfoArray[4] = { 0 };
+    descriptorBufferInfoArray[0].buffer = scn->matDevice.buffer;
+    descriptorBufferInfoArray[0].offset = 0;
+    descriptorBufferInfoArray[0].range = scn->matDevice.bufferSize;
+
+    descriptorBufferInfoArray[1].buffer = scn->matDevice.buffer;
+    descriptorBufferInfoArray[1].offset = floatOffset;
+    descriptorBufferInfoArray[1].range = scn->matDevice.bufferSize;
+
+    descriptorBufferInfoArray[2].buffer = scn->inVecDevice.buffer;
+    descriptorBufferInfoArray[2].offset = 0;
+    descriptorBufferInfoArray[2].range = scn->inVecDevice.bufferSize;
+
+    descriptorBufferInfoArray[3].buffer = scn->outVecDevice.buffer;
+    descriptorBufferInfoArray[3].offset = 0;
+    descriptorBufferInfoArray[3].range = scn->outVecDevice.bufferSize;
+
+    VkWriteDescriptorSet writeDescriptorSetsArray[4] = { 0 };
+    writeDescriptorSetsArray[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[0].dstSet = scn->descriptorSet;
+    writeDescriptorSetsArray[0].dstBinding = 0;
+    writeDescriptorSetsArray[0].descriptorCount = 1;
+    writeDescriptorSetsArray[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[0].pBufferInfo = &descriptorBufferInfoArray[0];
+
+    writeDescriptorSetsArray[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[1].dstSet = scn->descriptorSet;
+    writeDescriptorSetsArray[1].dstBinding = 1;
+    writeDescriptorSetsArray[1].descriptorCount = 1;
+    writeDescriptorSetsArray[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[1].pBufferInfo = &descriptorBufferInfoArray[1];
+
+    writeDescriptorSetsArray[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[2].dstSet = scn->descriptorSet;
+    writeDescriptorSetsArray[2].dstBinding = 2;
+    writeDescriptorSetsArray[2].descriptorCount = 1;
+    writeDescriptorSetsArray[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[2].pBufferInfo = &descriptorBufferInfoArray[2];
+
+    writeDescriptorSetsArray[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSetsArray[3].dstSet = scn->descriptorSet;
+    writeDescriptorSetsArray[3].dstBinding = 3;
+    writeDescriptorSetsArray[3].descriptorCount = 1;
+    writeDescriptorSetsArray[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writeDescriptorSetsArray[3].pBufferInfo = &descriptorBufferInfoArray[3];
+
+    vkUpdateDescriptorSets(state->device, ARRAY_LEN(writeDescriptorSetsArray), writeDescriptorSetsArray, 0, NULL);
+}
+
 
 static void
 bindScenarioELL2BufferDescriptorSetWithBuffers(VKState *state, ScenarioELL2Buffer *scnELL2Buffer)
@@ -1157,6 +1229,88 @@ runScenarioELLSimple(VKState *state, ScenarioELLSimple *scn, ELLMatrix *matrix)
     checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
 }
 
+static ScenarioELLBufferOffset
+createScenarioELLBufferOffset(VKState *state, ELLMatrix *matrix)
+{
+    ScenarioELLBufferOffset result = { 0 };
+
+    result.descriptorSetLayout = createConsecutiveDescriptorSetLayout(state->device, 4);
+    result.descriptorPool = createDescriptorPool(state->device);
+    result.descriptorSet = createDescriptorSet(state->device, result.descriptorSetLayout, result.descriptorPool);
+
+    u32 matrixSize = 2*matrix->M*matrix->P*sizeof(matrix->data[0])+3*sizeof(u32);
+    u32 vectorSize = matrix->N*sizeof(matrix->data[0]);
+
+    VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    // Staging buffers
+    result.matHost = createBuffer(state, matrixSize, usageFlags, memoryFlags);
+    result.inVecHost  = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+    result.outVecHost = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+
+    // On device memory buffers
+    result.matDevice = createBuffer(state, matrixSize, usageFlags, deviceMemoryFlags);
+    result.inVecDevice  = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
+    result.outVecDevice = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
+
+    {
+        VKBufferAndMemory ssbo = result.matHost;
+
+        void *mappedMemory = NULL;
+        vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+        u32 *u32MappedMemory = (u32 *)mappedMemory;
+        u32MappedMemory[0] = matrix->M;
+        u32MappedMemory[1] = matrix->P;
+        u32MappedMemory[2] = matrix->N;
+        u8 *data = (u8 *)(u32MappedMemory + 3);
+        u32 MP = matrix->M * matrix->P;
+
+        memcpy(data, matrix->columnIndex, MP * sizeof(matrix->columnIndex[0]));
+        data += MP * sizeof(matrix->columnIndex[0]);
+        memcpy(data, matrix->data, MP * sizeof(matrix->data[0]));
+
+        vkUnmapMemory(state->device, ssbo.bufferMemory);
+    }
+
+    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecHost);
+
+    copyStagingBufferToDevice(state, result.matHost, result.matDevice);
+    copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
+    copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
+
+    u32 floatOffset = 3 * sizeof(matrix->P) + (matrix->M * matrix->P * sizeof(matrix->columnIndex[0]));
+    bindScenarioELLBufferOffsetDescriptorSetWithBuffers(state, &result, floatOffset);
+    result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v2.spv", result.descriptorSetLayout);
+
+    return result;
+}
+
+static void
+runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, ELLMatrix *matrix)
+{
+    u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
+    u32 dispatchY = 1;
+    u32 dispatchZ = 1;
+
+    scn->commandBuffer = createCommandBuffer(state, &scn->pipelineDefinition, &scn->descriptorSet,
+                                             dispatchX, dispatchY, dispatchZ);
+
+    RunInformation runInfo[RUNS_PER_VERSION] = { 0 };
+    for(u32 i = 0; i < RUNS_PER_VERSION; i++)
+    {
+        u32 nonZeroCount = matrix->elementNum;
+        runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
+        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
+    }
+
+    printRunInfo(runInfo, ARRAY_LEN(runInfo));
+
+    copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
+    checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
+}
+
 static ScenarioELL2Buffer
 createScenarioELL2Buffer(VKState *state, ELLMatrix *matrix)
 {
@@ -1434,17 +1588,22 @@ int main()
 
     VKState state = initalizeVulkan();
 
-    printf("========================================\n");
+    printf("=== [ELL Simple] =======================\n");
 
     ScenarioELLSimple scnELLSimple = createScenarioELLSimple(&state, &bcsstk30ELL);
     runScenarioELLSimple(&state, &scnELLSimple, &bcsstk30ELL);
 
-    printf("========================================\n");
+    printf("=== [ELL Buffer Offset] ================\n");
+
+    ScenarioELLBufferOffset scnELLBufferOffset = createScenarioELLBufferOffset(&state, &bcsstk30ELL);
+    runScenarioELLBufferOffset(&state, &scnELLBufferOffset, &bcsstk30ELL);
+
+    printf("=== [ELL Two Buffers] ==================\n");
 
     ScenarioELL2Buffer scnELL2Buffer = createScenarioELL2Buffer(&state, &bcsstk30ELL);
     runScenarioELL2Buffer(&state, &scnELL2Buffer, &bcsstk30ELL);
 
-    printf("========================================\n");
+    printf("=== [SELL Simple] ======================\n");
 
     ScenarioSELL scnSELL = createScenarioSELL(&state, &bcsstk30SELL);
     runScenarioSELL(&state, &scnSELL, &bcsstk30SELL);
