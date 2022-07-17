@@ -254,6 +254,29 @@ NextInSplit(StrSplitIter *it)
   return result;
 }
 
+static bool
+isWhitespace(char c)
+{
+    return c == 0x20 || (c >= 0x09 && c <= 0x0d);
+}
+
+static Str
+StringTrim(Str str)
+{
+    while(str.length > 0 && isWhitespace(str.bytes[0]))
+    {
+        str.bytes++;
+        str.length--;
+    }
+
+    while(str.length > 0 && isWhitespace(str.bytes[str.length - 1]))
+    {
+        str.length--;
+    }
+
+    return str;
+}
+
 static Data
 readEntireFile(const char *fileName)
 {
@@ -775,10 +798,44 @@ printBufferedVector(VKState *state, VKBufferAndMemory buffer)
     vkUnmapMemory(state->device, buffer.bufferMemory);
 }
 
+static Vector
+getSetVector(float v, u32 len)
+{
+    Vector res = { 0 };
+
+    res.len = len;
+    res.data = malloc(res.len * sizeof(res.data[0]));
+    for(int i = 0; i < res.len; i++) {
+        res.data[i] = v;
+    }
+
+    return res;
+}
+
+static Vector
+createRandomUnilateralVector(u32 len)
+{
+    Vector res = getSetVector(0.0f, len);
+
+    for(u32 i = 0; i < len; i++)
+    {
+        res.data[i] = randomUnilateral();
+    }
+
+    return res;
+}
+
+static void
+destroyVector(Vector vec)
+{
+    free(vec.data);
+}
+
 static COOMatrix
 ReadMatrixFormatToCOO(const char *filename)
 {
     Str str = readEntireFileStr(filename);
+    double start = getWallTime();
     COOMatrix result = { 0 };
 
     bool isSymmetric = false;
@@ -810,7 +867,7 @@ ReadMatrixFormatToCOO(const char *filename)
 
     {
         // This line has M x N [element count]
-        StrSplitIter partIter = StringSplit(line, " ");
+        StrSplitIter partIter = StringSplit(StringTrim(line), " ");
         Str MStr = NextInSplit(&partIter);
         Str NStr = NextInSplit(&partIter);
         Str ElementNumStr = NextInSplit(&partIter);
@@ -833,17 +890,22 @@ ReadMatrixFormatToCOO(const char *filename)
     u32 elementIndex = 0;
     while((line = NextInSplit(&lineIter)).bytes != NULL)
     {
-        StrSplitIter partIter = StringSplit(line, " ");
+        StrSplitIter partIter = StringSplit(StringTrim(line), " ");
         Str RowStr = NextInSplit(&partIter);
         Str ColStr = NextInSplit(&partIter);
         Str ValueStr = NextInSplit(&partIter);
-        assert(RowStr.bytes && ColStr.bytes && ValueStr.length == 0);
+        assert(RowStr.bytes && ColStr.bytes);
+
+        float value = 1.0f;
+        if(ValueStr.length != 0) {
+            value = atof(ValueStr.bytes);
+        }
 
         u32 row = atoi(RowStr.bytes);
         u32 col = atoi(ColStr.bytes);
         result.row[elementIndex] = row;
         result.col[elementIndex] = col;
-        result.data[elementIndex] = 1.0f;
+        result.data[elementIndex] = value;
         elementIndex += 1;
 
         if(isSymmetric) {
@@ -852,19 +914,31 @@ ReadMatrixFormatToCOO(const char *filename)
             } else {
                 result.row[elementIndex] = col;
                 result.col[elementIndex] = row;
-                result.data[elementIndex] = 1.0f;
+                result.data[elementIndex] = value;
                 elementIndex += 1;
             }
         }
     }
     assert(elementIndex == result.elementNum);
 
+    double end = getWallTime();
+    printf("[COOMatrix Parse]: Parsing took = %.2lfs\n", end - start);
+
     return result;
+}
+
+static void
+destroyCOOMatrix(COOMatrix mat)
+{
+    free(mat.data);
+    free(mat.row);
+    free(mat.col);
 }
 
 static ELLMatrix
 COOToELLMatrix(COOMatrix matrix)
 {
+    double start = getWallTime();
     ELLMatrix result = { 0 };
 
     u32 minRow = INT_MAX;
@@ -931,12 +1005,23 @@ COOToELLMatrix(COOMatrix matrix)
         }
     }
 
+    double end = getWallTime();
+    printf("[ELLMatrix Parse]: Parsing took = %.2lfs\n", end - start);
+
     return result;
+}
+
+static void
+destroyELLMatrix(ELLMatrix mat)
+{
+    free(mat.data);
+    free(mat.columnIndex);
 }
 
 static SELLMatrix
 ELLToSELLMatrix(ELLMatrix matrix)
 {
+    double start = getWallTime();
     SELLMatrix result = { 0 };
 
     result.C = 2;
@@ -1008,21 +1093,60 @@ ELLToSELLMatrix(ELLMatrix matrix)
 
     printf("[SELLMatrix Parse]: totalDataAllocated = %uMB\n", TO_MEGABYTES(totalDataAllocated));
 
+    double end = getWallTime();
+    printf("[SELLMatrix Parse]: Parsing took = %.2lfs\n", end - start);
+
     return result;
 }
 
-static Vector
-getSetVector(float v, u32 len)
+static void
+destroySELLMatrix(SELLMatrix mat)
 {
-    Vector res = { 0 };
+    free(mat.data);
+    free(mat.columnIndex);
+    free(mat.rowOffsets);
+}
 
-    res.len = len;
-    res.data = malloc(res.len * sizeof(res.data[0]));
-    for(int i = 0; i < res.len; i++) {
-        res.data[i] = v;
+static Vector
+ELLMatrixMulVec(ELLMatrix mat, Vector vec)
+{
+    Vector result = getSetVector(0.0f, vec.len);
+
+    for(u32 row = 0; row < mat.M; row++)
+    {
+        for(u32 P = 0; P < mat.P; P++)
+        {
+            u32 cellOffset = row * mat.P + P;
+            u32 col = mat.columnIndex[cellOffset];
+            if(col == INVALID_COLUMN) { break; }
+            result.data[row] += vec.data[col] * mat.data[cellOffset];
+        }
     }
 
-    return res;
+    return result;
+}
+
+static void
+runTestsForCPUMatrixMul()
+{
+    COOMatrix matCOO = ReadMatrixFormatToCOO("data/bcsstk30.mtx");
+    ELLMatrix matELL = COOToELLMatrix(matCOO);
+    Vector vec = getSetVector(1.0, matELL.N);
+
+    Vector res = ELLMatrixMulVec(matELL, vec);
+    assert(res.len == vec.len);
+    for(u32 i = 0; i < vec.len; i++)
+    {
+        if(res.data[i] != expectedVector[i]) {
+            printf("i, lhs == rhs | %d, %f == %f\n", i, res.data[i], expectedVector[i]);
+            assert(res.data[i] == expectedVector[i]);
+        }
+    }
+
+    destroyCOOMatrix(matCOO);
+    destroyELLMatrix(matELL);
+    destroyVector(vec);
+    destroyVector(res);
 }
 
 static void
@@ -1035,25 +1159,33 @@ InVecToSSBO(VKState *state, Vector vec, VKBufferAndMemory ssbo)
 }
 
 static void
-checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, const float *expected, u32 len)
+checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, Vector expVec)
 {
-    void *mappedMemory = NULL;
-    vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
-    float *mappedMemoryFloat = (float *)mappedMemory;
-    for(u32 i = 0; i < len; i++)
+    bool success = true;
+    float *floatData = NULL;
+    vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, (void **)&floatData);
+
+    float epsilonLimit = 1e-3;
+    float maxEpsilon = 0.0;
+
+    for(u32 i = 0; i < expVec.len; i++)
     {
-        if(mappedMemoryFloat[i] != expected[i]) {
-            printf("i, lhs == rhs | %d, %f == %f\n", i, mappedMemoryFloat[i], expected[i]);
-            assert(mappedMemoryFloat[i] == expected[i]);
+        float epsilon = fabs(floatData[i] - expVec.data[i]);
+        maxEpsilon = MAX(epsilon, maxEpsilon);
+
+        if(epsilon > epsilonLimit) {
+            printf("[Vector match check]: (i, lhs == rhs) => (%d, %f == %f)\n", i, floatData[i], expVec.data[i]);
+            success = false;
+            break;
         }
     }
     vkUnmapMemory(state->device, ssbo.bufferMemory);
 
-    printf("[Vector match check]: Pass!\n");
+    printf("[Vector match check]: %s! maxEpsilon = %f\n", (success ? "Pass" : "FAILED"), maxEpsilon);
 }
 
 static ScenarioELLSimple
-createScenarioELLSimple(VKState *state, ELLMatrix *matrix)
+createScenarioELLSimple(VKState *state, ELLMatrix *matrix, Vector vec)
 {
     ScenarioELLSimple result = { 0 };
 
@@ -1097,7 +1229,7 @@ createScenarioELLSimple(VKState *state, ELLMatrix *matrix)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecHost);
+    InVecToSSBO(state, vec, result.inVecHost);
 
     copyStagingBufferToDevice(state, result.matHost, result.matDevice);
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
@@ -1118,7 +1250,7 @@ createScenarioELLSimple(VKState *state, ELLMatrix *matrix)
 }
 
 static void
-runScenarioELLSimple(VKState *state, ScenarioELLSimple *scn, ELLMatrix *matrix)
+runScenarioELLSimple(VKState *state, ScenarioELLSimple *scn, ELLMatrix *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1138,11 +1270,11 @@ runScenarioELLSimple(VKState *state, ScenarioELLSimple *scn, ELLMatrix *matrix)
     printRunInfo(runInfo, ARRAY_LEN(runInfo));
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
+    checkIfVectorIsSame(state, scn->outVecHost, expVec);
 }
 
 static ScenarioELLBufferOffset
-createScenarioELLBufferOffset(VKState *state, ELLMatrix *matrix)
+createScenarioELLBufferOffset(VKState *state, ELLMatrix *matrix, Vector vec)
 {
     ScenarioELLBufferOffset result = { 0 };
 
@@ -1186,7 +1318,7 @@ createScenarioELLBufferOffset(VKState *state, ELLMatrix *matrix)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecHost);
+    InVecToSSBO(state, vec, result.inVecHost);
 
     copyStagingBufferToDevice(state, result.matHost, result.matDevice);
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
@@ -1208,7 +1340,7 @@ createScenarioELLBufferOffset(VKState *state, ELLMatrix *matrix)
 }
 
 static void
-runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, ELLMatrix *matrix)
+runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, ELLMatrix *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1228,11 +1360,11 @@ runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, ELLMatr
     printRunInfo(runInfo, ARRAY_LEN(runInfo));
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
+    checkIfVectorIsSame(state, scn->outVecHost, expVec);
 }
 
 static ScenarioELL2Buffer
-createScenarioELL2Buffer(VKState *state, ELLMatrix *matrix)
+createScenarioELL2Buffer(VKState *state, ELLMatrix *matrix, Vector vec)
 {
     ScenarioELL2Buffer result = { 0 };
 
@@ -1289,7 +1421,7 @@ createScenarioELL2Buffer(VKState *state, ELLMatrix *matrix)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecHost);
+    InVecToSSBO(state, vec, result.inVecHost);
 
     copyStagingBufferToDevice(state, result.matHost, result.matDevice);
     copyStagingBufferToDevice(state, result.matFloatHost, result.matFloatDevice);
@@ -1311,7 +1443,7 @@ createScenarioELL2Buffer(VKState *state, ELLMatrix *matrix)
 }
 
 static void
-runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, ELLMatrix *matrix)
+runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, ELLMatrix *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1331,11 +1463,11 @@ runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, ELLMatrix *matrix
     printRunInfo(runInfo, ARRAY_LEN(runInfo));
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
+    checkIfVectorIsSame(state, scn->outVecHost, expVec);
 }
 
 static ScenarioSELL
-createScenarioSELL(VKState *state, SELLMatrix *matrix)
+createScenarioSELL(VKState *state, SELLMatrix *matrix, Vector vec)
 {
     ScenarioSELL result = { 0 };
 
@@ -1406,7 +1538,7 @@ createScenarioSELL(VKState *state, SELLMatrix *matrix)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecHost);
+    InVecToSSBO(state, vec, result.inVecHost);
 
     copyStagingBufferToDevice(state, result.matHeaderAndColIndexHost, result.matHeaderAndColIndexDevice);
     copyStagingBufferToDevice(state, result.matRowOffsetsHost, result.matRowOffsetsDevice);
@@ -1430,7 +1562,7 @@ createScenarioSELL(VKState *state, SELLMatrix *matrix)
 }
 
 static void
-runScenarioSELL(VKState *state, ScenarioSELL *scn, SELLMatrix *matrix)
+runScenarioSELL(VKState *state, ScenarioSELL *scn, SELLMatrix *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1450,11 +1582,11 @@ runScenarioSELL(VKState *state, ScenarioSELL *scn, SELLMatrix *matrix)
     printRunInfo(runInfo, ARRAY_LEN(runInfo));
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
+    checkIfVectorIsSame(state, scn->outVecHost, expVec);
 }
 
 static ScenarioSELLOffsets
-createScenarioSELLOffsets(VKState *state, SELLMatrix *matrix)
+createScenarioSELLOffsets(VKState *state, SELLMatrix *matrix, Vector vec)
 {
     ScenarioSELLOffsets result = { 0 };
 
@@ -1506,7 +1638,7 @@ createScenarioSELLOffsets(VKState *state, SELLMatrix *matrix)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, getSetVector(1.0, matrix->N), result.inVecHost);
+    InVecToSSBO(state, vec, result.inVecHost);
 
     copyStagingBufferToDevice(state, result.matHost, result.matDevice);
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
@@ -1528,7 +1660,7 @@ createScenarioSELLOffsets(VKState *state, SELLMatrix *matrix)
 }
 
 static void
-runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, SELLMatrix *matrix)
+runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, SELLMatrix *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1548,43 +1680,58 @@ runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, SELLMatrix *mat
     printRunInfo(runInfo, ARRAY_LEN(runInfo));
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    checkIfVectorIsSame(state, scn->outVecHost, expectedVector, matrix->N);
+    checkIfVectorIsSame(state, scn->outVecHost, expVec);
+}
+
+static void
+runTestsForMatrix(VKState *state, const char *filename)
+{
+    COOMatrix matCOO = ReadMatrixFormatToCOO(filename);
+    ELLMatrix matELL = COOToELLMatrix(matCOO);
+    SELLMatrix matSELL = ELLToSELLMatrix(matELL);
+    Vector vec = createRandomUnilateralVector(matELL.N);
+    Vector expVec = ELLMatrixMulVec(matELL, vec);
+
+    printf("=== [ELL Simple] =======================\n");
+
+    ScenarioELLSimple scnELLSimple = createScenarioELLSimple(state, &matELL, vec);
+    runScenarioELLSimple(state, &scnELLSimple, &matELL, expVec);
+
+    printf("=== [ELL Buffer Offset] ================\n");
+
+    ScenarioELLBufferOffset scnELLBufferOffset = createScenarioELLBufferOffset(state, &matELL, vec);
+    runScenarioELLBufferOffset(state, &scnELLBufferOffset, &matELL, expVec);
+
+    printf("=== [ELL Two Buffers] ==================\n");
+
+    ScenarioELL2Buffer scnELL2Buffer = createScenarioELL2Buffer(state, &matELL, vec);
+    runScenarioELL2Buffer(state, &scnELL2Buffer, &matELL, expVec);
+
+    printf("=== [SELL Simple] ======================\n");
+
+    ScenarioSELL scnSELL = createScenarioSELL(state, &matSELL, vec);
+    runScenarioSELL(state, &scnSELL, &matSELL, expVec);
+
+    printf("=== [SELL Offsets] ======================\n");
+
+    ScenarioSELLOffsets scnSELLOffsets = createScenarioSELLOffsets(state, &matSELL, vec);
+    runScenarioSELLOffsets(state, &scnSELLOffsets, &matSELL, expVec);
+
+    printf("=== [%31s] ===\n", filename);
+
+    destroyCOOMatrix(matCOO);
+    destroyELLMatrix(matELL);
+    destroySELLMatrix(matSELL);
 }
 
 int main()
 {
-    COOMatrix bcsstk30COO = ReadMatrixFormatToCOO("data/bcsstk30.mtx");
-    ELLMatrix bcsstk30ELL = COOToELLMatrix(bcsstk30COO);
-    SELLMatrix bcsstk30SELL = ELLToSELLMatrix(bcsstk30ELL);
-
     VKState state = initalizeVulkan();
 
-    printf("=== [ELL Simple] =======================\n");
-
-    ScenarioELLSimple scnELLSimple = createScenarioELLSimple(&state, &bcsstk30ELL);
-    runScenarioELLSimple(&state, &scnELLSimple, &bcsstk30ELL);
-
-    printf("=== [ELL Buffer Offset] ================\n");
-
-    ScenarioELLBufferOffset scnELLBufferOffset = createScenarioELLBufferOffset(&state, &bcsstk30ELL);
-    runScenarioELLBufferOffset(&state, &scnELLBufferOffset, &bcsstk30ELL);
-
-    printf("=== [ELL Two Buffers] ==================\n");
-
-    ScenarioELL2Buffer scnELL2Buffer = createScenarioELL2Buffer(&state, &bcsstk30ELL);
-    runScenarioELL2Buffer(&state, &scnELL2Buffer, &bcsstk30ELL);
-
-    printf("=== [SELL Simple] ======================\n");
-
-    ScenarioSELL scnSELL = createScenarioSELL(&state, &bcsstk30SELL);
-    runScenarioSELL(&state, &scnSELL, &bcsstk30SELL);
-
-    printf("=== [SELL Offsets] ======================\n");
-
-    ScenarioSELLOffsets scnSELLOffsets = createScenarioSELLOffsets(&state, &bcsstk30SELL);
-    runScenarioSELLOffsets(&state, &scnSELLOffsets, &bcsstk30SELL);
-
-    printf("========================================\n");
+    runTestsForCPUMatrixMul();
+    runTestsForMatrix(&state, "data/bcsstk30.mtx");
+    runTestsForMatrix(&state, "data/bcsstk32.mtx");
+    runTestsForMatrix(&state, "data/s3dkt3m2.mtx");
 
     return 0;
 }
