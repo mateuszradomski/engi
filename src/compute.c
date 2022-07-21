@@ -492,6 +492,13 @@ createBuffer(VKState *state, u32 bufferSize, VkBufferUsageFlags usageFlags, VkMe
 }
 
 static void
+destroyBuffer(VKState *state, VKBufferAndMemory *buff)
+{
+    vkFreeMemory(state->device, buff->bufferMemory, NULL);
+    vkDestroyBuffer(state->device, buff->buffer, NULL);
+}
+
+static void
 bindDescriptorSetWithBuffers(VKState *state, VkDescriptorSet descriptorSet,
                              VKBufferAndMemory *buffers, u32 *offsets, u32 len)
 {
@@ -1273,6 +1280,26 @@ runScenarioELLSimple(VKState *state, ScenarioELLSimple *scn, ELLMatrix *matrix, 
     checkIfVectorIsSame(state, scn->outVecHost, expVec);
 }
 
+static void
+destroyScenarioELLSimple(VKState *state, ScenarioELLSimple *scn)
+{
+    vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
+    vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+
+    destroyBuffer(state, &scn->outVecDevice);
+    destroyBuffer(state, &scn->inVecDevice);
+    destroyBuffer(state, &scn->matDevice);
+
+    destroyBuffer(state, &scn->outVecHost);
+    destroyBuffer(state, &scn->inVecHost);
+    destroyBuffer(state, &scn->matHost);
+
+    vkFreeDescriptorSets(state->device, scn->descriptorPool, 1, &scn->descriptorSet);
+    vkDestroyDescriptorPool(state->device, scn->descriptorPool, NULL);
+    vkDestroyDescriptorSetLayout(state->device, scn->descriptorSetLayout, NULL);
+}
+
 static ScenarioELLBufferOffset
 createScenarioELLBufferOffset(VKState *state, ELLMatrix *matrix, Vector vec)
 {
@@ -1361,6 +1388,26 @@ runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, ELLMatr
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     checkIfVectorIsSame(state, scn->outVecHost, expVec);
+}
+
+static void
+destroyScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn)
+{
+    vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
+    vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+
+    destroyBuffer(state, &scn->outVecDevice);
+    destroyBuffer(state, &scn->inVecDevice);
+    destroyBuffer(state, &scn->matDevice);
+
+    destroyBuffer(state, &scn->outVecHost);
+    destroyBuffer(state, &scn->inVecHost);
+    destroyBuffer(state, &scn->matHost);
+
+    vkFreeDescriptorSets(state->device, scn->descriptorPool, 1, &scn->descriptorSet);
+    vkDestroyDescriptorPool(state->device, scn->descriptorPool, NULL);
+    vkDestroyDescriptorSetLayout(state->device, scn->descriptorSetLayout, NULL);
 }
 
 static ScenarioELL2Buffer
@@ -1464,6 +1511,28 @@ runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, ELLMatrix *matrix
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     checkIfVectorIsSame(state, scn->outVecHost, expVec);
+}
+
+static void
+destroyScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn)
+{
+    vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
+    vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+
+    destroyBuffer(state, &scn->outVecDevice);
+    destroyBuffer(state, &scn->inVecDevice);
+    destroyBuffer(state, &scn->matFloatDevice);
+    destroyBuffer(state, &scn->matDevice);
+
+    destroyBuffer(state, &scn->outVecHost);
+    destroyBuffer(state, &scn->inVecHost);
+    destroyBuffer(state, &scn->matFloatHost);
+    destroyBuffer(state, &scn->matHost);
+
+    vkFreeDescriptorSets(state->device, scn->descriptorPool, 1, &scn->descriptorSet);
+    vkDestroyDescriptorPool(state->device, scn->descriptorPool, NULL);
+    vkDestroyDescriptorSetLayout(state->device, scn->descriptorSetLayout, NULL);
 }
 
 static ScenarioSELL
@@ -1585,6 +1654,30 @@ runScenarioSELL(VKState *state, ScenarioSELL *scn, SELLMatrix *matrix, Vector ex
     checkIfVectorIsSame(state, scn->outVecHost, expVec);
 }
 
+static void
+destroyScenarioSELL(VKState *state, ScenarioSELL *scn)
+{
+    vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
+    vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+
+    destroyBuffer(state, &scn->outVecDevice);
+    destroyBuffer(state, &scn->inVecDevice);
+    destroyBuffer(state, &scn->matFloatDevice);
+    destroyBuffer(state, &scn->matRowOffsetsDevice);
+    destroyBuffer(state, &scn->matHeaderAndColIndexDevice);
+
+    destroyBuffer(state, &scn->outVecHost);
+    destroyBuffer(state, &scn->inVecHost);
+    destroyBuffer(state, &scn->matFloatHost);
+    destroyBuffer(state, &scn->matRowOffsetsHost);
+    destroyBuffer(state, &scn->matHeaderAndColIndexHost);
+
+    vkFreeDescriptorSets(state->device, scn->descriptorPool, 1, &scn->descriptorSet);
+    vkDestroyDescriptorPool(state->device, scn->descriptorPool, NULL);
+    vkDestroyDescriptorSetLayout(state->device, scn->descriptorSetLayout, NULL);
+}
+
 static ScenarioSELLOffsets
 createScenarioSELLOffsets(VKState *state, SELLMatrix *matrix, Vector vec)
 {
@@ -1684,6 +1777,26 @@ runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, SELLMatrix *mat
 }
 
 static void
+destroyScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn)
+{
+    vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
+    vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+
+    destroyBuffer(state, &scn->outVecDevice);
+    destroyBuffer(state, &scn->inVecDevice);
+    destroyBuffer(state, &scn->matDevice);
+
+    destroyBuffer(state, &scn->outVecHost);
+    destroyBuffer(state, &scn->inVecHost);
+    destroyBuffer(state, &scn->matHost);
+
+    vkFreeDescriptorSets(state->device, scn->descriptorPool, 1, &scn->descriptorSet);
+    vkDestroyDescriptorPool(state->device, scn->descriptorPool, NULL);
+    vkDestroyDescriptorSetLayout(state->device, scn->descriptorSetLayout, NULL);
+}
+
+static void
 runTestsForMatrix(VKState *state, const char *filename)
 {
     COOMatrix matCOO = ReadMatrixFormatToCOO(filename);
@@ -1696,26 +1809,31 @@ runTestsForMatrix(VKState *state, const char *filename)
 
     ScenarioELLSimple scnELLSimple = createScenarioELLSimple(state, &matELL, vec);
     runScenarioELLSimple(state, &scnELLSimple, &matELL, expVec);
+    destroyScenarioELLSimple(state, &scnELLSimple);
 
     printf("=== [ELL Buffer Offset] ================\n");
 
     ScenarioELLBufferOffset scnELLBufferOffset = createScenarioELLBufferOffset(state, &matELL, vec);
     runScenarioELLBufferOffset(state, &scnELLBufferOffset, &matELL, expVec);
+    destroyScenarioELLBufferOffset(state, &scnELLBufferOffset);
 
     printf("=== [ELL Two Buffers] ==================\n");
 
     ScenarioELL2Buffer scnELL2Buffer = createScenarioELL2Buffer(state, &matELL, vec);
     runScenarioELL2Buffer(state, &scnELL2Buffer, &matELL, expVec);
+    destroyScenarioELL2Buffer(state, &scnELL2Buffer);
 
     printf("=== [SELL Simple] ======================\n");
 
     ScenarioSELL scnSELL = createScenarioSELL(state, &matSELL, vec);
     runScenarioSELL(state, &scnSELL, &matSELL, expVec);
+    destroyScenarioSELL(state, &scnSELL);
 
     printf("=== [SELL Offsets] ======================\n");
 
     ScenarioSELLOffsets scnSELLOffsets = createScenarioSELLOffsets(state, &matSELL, vec);
     runScenarioSELLOffsets(state, &scnSELLOffsets, &matSELL, expVec);
+    destroyScenarioSELLOffsets(state, &scnSELLOffsets);
 
     printf("=== [%31s] ===\n", filename);
 
