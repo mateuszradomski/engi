@@ -17,7 +17,7 @@
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
-#define RUNS_PER_VERSION 5
+#define RUNS_PER_VERSION 1000
 
 typedef struct VKDeviceAndComputeQueue
 {
@@ -159,6 +159,7 @@ typedef struct ScenarioSELLOffsets
 }
 
 u32 glob_rand_state = 0x34fae2;
+RunInfoList runInfos;
 
 static u32
 xorshift32()
@@ -314,14 +315,61 @@ readEntireFileStr(const char *filename)
 }
 
 static void
-printRunInfo(RunInformation *runInfo, u32 len)
+saveRunInfo(char *name, RunInformation *runInfo, u32 len, double maxEpsilon)
 {
-    const char *col1 = "Exec time [s]";
-    const char *col2 = "GFLOPs";
-    printf("| %15s | %15s |\n", col1, col2);
-    for(u32 i = 0; i < len; i++)
+    RunInfoNode *node = malloc(sizeof(RunInfoNode));
+
+    SLL_QUEUE_PUSH(runInfos.head, runInfos.tail, node);
+
+    node->name = name;
+    node->maxEpsilon = maxEpsilon;
+    node->len = len;
+    node->infos = malloc(sizeof(RunInformation) * len);
+    memcpy(node->infos, runInfo, sizeof(RunInformation) * len);
+}
+
+static void
+printRunsStats()
+{
+    const char *col1 = "Name";
+    const char *col2 = "Exec time [ms]";
+    const char *col3 = "Exec time SD";
+    const char *col4 = "GFLOPs";
+    const char *col5 = "GFLOPs SD";
+    const char *col6 = "Max epsilon";
+    printf("| %15s | %15s | %15s | %15s | %15s | %15s |\n",
+           col1, col2, col3, col4, col5, col6);
+
+    RunInfoNode *node = runInfos.head;
+    while(node)
     {
-        printf("| %15f | %15f |\n", runInfo[i].time, runInfo[i].gflops);
+        double gflopSum = 0.0;
+        double timeSum = 0.0;
+        for(u32 i = 0; i < node->len; i++) {
+            gflopSum += node->infos[i].gflops;
+            timeSum += node->infos[i].time;
+        }
+        double gflopAvg = gflopSum / node->len;
+        double timeAvg = timeSum / node->len;
+
+        double gflopVar = 0.0;
+        double timeVar = 0.0;
+        for(u32 i = 0; i < node->len; i++) {
+            gflopVar += powf(gflopAvg - node->infos[i].gflops, 2);
+            timeVar += powf(timeAvg - node->infos[i].time, 2);
+        }
+        double gflopSD = sqrtf(gflopVar / (node->len - 1));
+        double timeSD = sqrtf(timeVar / (node->len - 1));
+
+        printf("| %15s | %15f | %15f | %15f | %15f | %15f |\n",
+               node->name, timeAvg, timeSD, gflopAvg, gflopSD, node->maxEpsilon);
+
+        SLL_QUEUE_POP(runInfos.head, runInfos.tail);
+
+        RunInfoNode *tmp = node;
+        node = node->next;
+        free(tmp->infos);
+        free(tmp);
     }
 }
 
@@ -774,7 +822,7 @@ runCommandBuffer(VKState *instance, VkCommandBuffer *commandBuffer)
                                            0, 2, sizeof(u64) * 2, ts, sizeof(u64), VK_QUERY_RESULT_64_BIT));
     vkDestroyFence(instance->device, fence, NULL);
 
-    double execTime = (ts[1] - ts[0]) / 1e9;
+    double execTime = (ts[1] - ts[0]) / 1e6;
     return execTime;
 }
 
@@ -888,10 +936,8 @@ ReadMatrixFormatToCOO(const char *filename)
         result.col = malloc(toAllocate);
         totalDataAllocated += 3 * toAllocate;
 
-        printf("[COOMatrix Parse]: MStr = %.*s\n", MStr.length, MStr.bytes);
-        printf("[COOMatrix Parse]: NStr = %.*s\n", NStr.length, NStr.bytes);
-        printf("[COOMatrix Parse]: ElementNum = %d\n", result.elementNum);
-        printf("[COOMatrix Parse]: totalDataAllocated = %uMB\n", TO_MEGABYTES(totalDataAllocated));
+        printf("[COOMatrix Parse]: MStr = %.*s, NStr = %.*s, ElementNum = %u\n",
+               MStr.length, MStr.bytes, NStr.length, NStr.bytes, result.elementNum);
     }
 
     u32 elementIndex = 0;
@@ -929,7 +975,8 @@ ReadMatrixFormatToCOO(const char *filename)
     assert(elementIndex == result.elementNum);
 
     double end = getWallTime();
-    printf("[COOMatrix Parse]: Parsing took = %.2lfs\n", end - start);
+    printf("[COOMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n",
+           end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
@@ -990,10 +1037,7 @@ COOToELLMatrix(COOMatrix matrix)
     totalDataAllocated += M*P*sizeof(result.data[0]);
     totalDataAllocated += M * P * sizeof(result.columnIndex[0]);
 
-    printf("[ELLMatrix Parse]: Pmax = %u\n", result.P);
-    printf("[ELLMatrix Parse]: M = %u\n", result.M);
-    printf("[ELLMatrix Parse]: N = %u\n", result.N);
-    printf("[ELLMatrix Parse]: totalDataAllocated = %uMB\n", TO_MEGABYTES(totalDataAllocated));
+    printf("[ELLMatrix Parse]: M = %u, N = %u, P = %u\n", result.M, result.N, result.P);
     
     memset(result.data, 0, M*P*sizeof(result.data[0]));
     memset(result.columnIndex, 0xff, M*P*sizeof(result.columnIndex[0]));
@@ -1013,7 +1057,8 @@ COOToELLMatrix(COOMatrix matrix)
     }
 
     double end = getWallTime();
-    printf("[ELLMatrix Parse]: Parsing took = %.2lfs\n", end - start);
+    printf("[ELLMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n",
+           end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
@@ -1036,9 +1081,7 @@ ELLToSELLMatrix(ELLMatrix matrix)
     result.N = matrix.N;
     result.elementNum = matrix.elementNum; 
 
-    printf("[SELLMatrix Parse]: M = %u\n", result.M);
-    printf("[SELLMatrix Parse]: N = %u\n", result.N);
-    printf("[SELLMatrix Parse]: C = %u\n", result.C);
+    printf("[SELLMatrix Parse]: M = %u, N = %u, C = %u\n", result.M, result.N, result.C);
 
     u32 totalDataAllocated = 0;
 
@@ -1098,10 +1141,9 @@ ELLToSELLMatrix(ELLMatrix matrix)
         }
     }
 
-    printf("[SELLMatrix Parse]: totalDataAllocated = %uMB\n", TO_MEGABYTES(totalDataAllocated));
-
     double end = getWallTime();
-    printf("[SELLMatrix Parse]: Parsing took = %.2lfs\n", end - start);
+    printf("[SELLMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n",
+           end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
@@ -1165,7 +1207,7 @@ InVecToSSBO(VKState *state, Vector vec, VKBufferAndMemory ssbo)
     vkUnmapMemory(state->device, ssbo.bufferMemory);
 }
 
-static void
+static double
 checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, Vector expVec)
 {
     bool success = true;
@@ -1188,7 +1230,7 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, Vector expVec)
     }
     vkUnmapMemory(state->device, ssbo.bufferMemory);
 
-    printf("[Vector match check]: %s! maxEpsilon = %f\n", (success ? "Pass" : "FAILED"), maxEpsilon);
+    return maxEpsilon;
 }
 
 static ScenarioELLSimple
@@ -1271,13 +1313,13 @@ runScenarioELLSimple(VKState *state, ScenarioELLSimple *scn, ELLMatrix *matrix, 
     {
         u32 nonZeroCount = matrix->elementNum;
         runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
-        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
+        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e6;
     }
 
-    printRunInfo(runInfo, ARRAY_LEN(runInfo));
-
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+
+    saveRunInfo("ELLSimple", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
 }
 
 static void
@@ -1381,13 +1423,13 @@ runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, ELLMatr
     {
         u32 nonZeroCount = matrix->elementNum;
         runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
-        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
+        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e6;
     }
 
-    printRunInfo(runInfo, ARRAY_LEN(runInfo));
-
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+
+    saveRunInfo("ELLBufferOffset", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
 }
 
 static void
@@ -1504,13 +1546,13 @@ runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, ELLMatrix *matrix
     {
         u32 nonZeroCount = matrix->elementNum;
         runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
-        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
+        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e6;
     }
 
-    printRunInfo(runInfo, ARRAY_LEN(runInfo));
-
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+
+    saveRunInfo("ELL2Buffer", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
 }
 
 static void
@@ -1645,13 +1687,13 @@ runScenarioSELL(VKState *state, ScenarioSELL *scn, SELLMatrix *matrix, Vector ex
     {
         u32 nonZeroCount = matrix->elementNum;
         runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
-        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
+        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e6;
     }
 
-    printRunInfo(runInfo, ARRAY_LEN(runInfo));
-
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+
+    saveRunInfo("SELL", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
 }
 
 static void
@@ -1767,13 +1809,13 @@ runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, SELLMatrix *mat
     {
         u32 nonZeroCount = matrix->elementNum;
         runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
-        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e9;
+        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e6;
     }
 
-    printRunInfo(runInfo, ARRAY_LEN(runInfo));
-
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+
+    saveRunInfo("SELLOffsets", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
 }
 
 static void
@@ -1799,43 +1841,33 @@ destroyScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn)
 static void
 runTestsForMatrix(VKState *state, const char *filename)
 {
+    printf("=== [%31s] ===\n", filename);
+
     COOMatrix matCOO = ReadMatrixFormatToCOO(filename);
     ELLMatrix matELL = COOToELLMatrix(matCOO);
     SELLMatrix matSELL = ELLToSELLMatrix(matELL);
     Vector vec = createRandomUnilateralVector(matELL.N);
     Vector expVec = ELLMatrixMulVec(matELL, vec);
 
-    printf("=== [ELL Simple] =======================\n");
-
     ScenarioELLSimple scnELLSimple = createScenarioELLSimple(state, &matELL, vec);
     runScenarioELLSimple(state, &scnELLSimple, &matELL, expVec);
     destroyScenarioELLSimple(state, &scnELLSimple);
-
-    printf("=== [ELL Buffer Offset] ================\n");
 
     ScenarioELLBufferOffset scnELLBufferOffset = createScenarioELLBufferOffset(state, &matELL, vec);
     runScenarioELLBufferOffset(state, &scnELLBufferOffset, &matELL, expVec);
     destroyScenarioELLBufferOffset(state, &scnELLBufferOffset);
 
-    printf("=== [ELL Two Buffers] ==================\n");
-
     ScenarioELL2Buffer scnELL2Buffer = createScenarioELL2Buffer(state, &matELL, vec);
     runScenarioELL2Buffer(state, &scnELL2Buffer, &matELL, expVec);
     destroyScenarioELL2Buffer(state, &scnELL2Buffer);
-
-    printf("=== [SELL Simple] ======================\n");
 
     ScenarioSELL scnSELL = createScenarioSELL(state, &matSELL, vec);
     runScenarioSELL(state, &scnSELL, &matSELL, expVec);
     destroyScenarioSELL(state, &scnSELL);
 
-    printf("=== [SELL Offsets] ======================\n");
-
     ScenarioSELLOffsets scnSELLOffsets = createScenarioSELLOffsets(state, &matSELL, vec);
     runScenarioSELLOffsets(state, &scnSELLOffsets, &matSELL, expVec);
     destroyScenarioSELLOffsets(state, &scnSELLOffsets);
-
-    printf("=== [%31s] ===\n", filename);
 
     destroyCOOMatrix(matCOO);
     destroyELLMatrix(matELL);
@@ -1846,10 +1878,16 @@ int main()
 {
     VKState state = initalizeVulkan();
 
+#ifdef TESTS
     runTestsForCPUMatrixMul();
+#endif
+
     runTestsForMatrix(&state, "data/bcsstk30.mtx");
+    printRunsStats();
     runTestsForMatrix(&state, "data/bcsstk32.mtx");
+    printRunsStats();
     runTestsForMatrix(&state, "data/s3dkt3m2.mtx");
+    printRunsStats();
 
     return 0;
 }

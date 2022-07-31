@@ -63,11 +63,41 @@ typedef struct SELLMatrix
     u32 elementNum;
 } SELLMatrix;
 
+#define STMNT(S) do{ S }while(0)
+
+#define SLL_STACK_PUSH_(H,N) N->next=H,H=N
+#define SLL_STACK_POP_(H) H=H=H->next
+#define SLL_QUEUE_PUSH_MULTIPLE_(F,L,FF,LL) if(LL){if(F){L->next=FF;}else{F=FF;}L=LL;L->next=0;}
+#define SLL_QUEUE_PUSH_(F,L,N) SLL_QUEUE_PUSH_MULTIPLE_(F,L,N,N)
+#define SLL_QUEUE_POP_(F,L) if (F==L) { F=L=0; } else { F=F->next; }
+
+#define SLL_STACK_PUSH(H,N) (SLL_STACK_PUSH_((H),(N)))
+#define SLL_STACK_POP(H) (SLL_STACK_POP_((H)))
+#define SLL_QUEUE_PUSH_MULTIPLE(F,L,FF,LL) STMNT( SLL_QUEUE_PUSH_MULTIPLE_((F),(L),(FF),(LL)) )
+#define SLL_QUEUE_PUSH(F,L,N) STMNT( SLL_QUEUE_PUSH_((F),(L),(N)) )
+#define SLL_QUEUE_POP(F,L) STMNT( SLL_QUEUE_POP_((F),(L)) )
+
 typedef struct RunInformation 
 {
     double time;
     double gflops;
 } RunInformation;
+
+typedef struct RunInfoNode 
+{
+    RunInformation *infos;
+    u32 len;
+    char *name;
+    double maxEpsilon;
+    struct RunInfoNode *next;
+} RunInfoNode;
+
+typedef struct RunInfoList 
+{
+    RunInfoNode *head;
+    RunInfoNode *tail;
+    u32 count;
+} RunInfoList;
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
