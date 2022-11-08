@@ -43,6 +43,7 @@ typedef struct COOMatrix
 {
     float *data;
     u32 *row, *col, elementNum;
+    u32 M, N;
 } COOMatrix;
 
 // If in columnIndex means no data (zero) at that space

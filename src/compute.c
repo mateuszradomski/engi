@@ -52,6 +52,28 @@ typedef struct VKState
     VkCommandPool commandPool;
 } VKState;
 
+typedef struct ScenarioCOOSimple
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matFloatHost;
+    VKBufferAndMemory matRowHost;
+    VKBufferAndMemory matColHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matFloatDevice;
+    VKBufferAndMemory matColDevice;
+    VKBufferAndMemory matRowDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioCOOSimple;
+
 typedef struct ScenarioELLSimple
 {
     VkDescriptorSetLayout descriptorSetLayout;
@@ -974,6 +996,22 @@ ReadMatrixFormatToCOO(const char *filename)
     }
     assert(elementIndex == result.elementNum);
 
+    u32 minRow = INT_MAX;
+    u32 minCol = INT_MAX;
+    u32 maxRow = 0;
+    u32 maxCol = 0;
+
+    for(int i = 0; i < result.elementNum; i++)
+    {
+        minRow = MIN(result.row[i], minRow);
+        minCol = MIN(result.col[i], minCol);
+        maxRow = MAX(result.row[i], maxRow);
+        maxCol = MAX(result.col[i], maxCol);
+    }
+
+    result.M = maxRow-minRow+1;
+    result.N = maxCol-minCol+1;
+
     double end = getWallTime();
     printf("[COOMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n",
            end - start, TO_MEGABYTES(totalDataAllocated));
@@ -1231,6 +1269,148 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, Vector expVec)
     vkUnmapMemory(state->device, ssbo.bufferMemory);
 
     return maxEpsilon;
+}
+
+static ScenarioCOOSimple
+createScenarioCOOSimple(VKState *state, COOMatrix *matrix, Vector vec)
+{
+    ScenarioCOOSimple result = { 0 };
+
+    const u32 INPUT_MAT_DESC = 3;
+    const u32 INPUT_VEC_DESC = 1;
+    const u32 OUTPUT_VEC_DESC = 1;
+    u32 descriptorCount = INPUT_MAT_DESC + INPUT_VEC_DESC + OUTPUT_VEC_DESC;
+    result.descriptorSetLayout = createConsecutiveDescriptorSetLayout(state->device, descriptorCount);
+    result.descriptorPool = createDescriptorPool(state->device);
+    result.descriptorSet = createDescriptorSet(state->device, result.descriptorSetLayout, result.descriptorPool);
+
+    const u32 HEADER_SIZE = sizeof(matrix->elementNum) + sizeof(matrix->N) + sizeof(matrix->M);
+    u32 matrixFloatSize = matrix->elementNum*sizeof(matrix->data[0]) + HEADER_SIZE;
+    u32 matrixRowSize = matrix->elementNum*sizeof(matrix->row[0]);
+    u32 matrixColSize = matrix->elementNum*sizeof(matrix->col[0]);
+    u32 vectorSize = matrix->N*sizeof(matrix->data[0]);
+
+    VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    // Staging buffers
+    result.matFloatHost = createBuffer(state, matrixFloatSize, usageFlags, memoryFlags);
+    result.matColHost   = createBuffer(state, matrixRowSize, usageFlags, memoryFlags);
+    result.matRowHost   = createBuffer(state, matrixColSize, usageFlags, memoryFlags);
+    result.inVecHost    = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+    result.outVecHost   = createBuffer(state, vectorSize, usageFlags, memoryFlags);
+
+    // On device memory buffers
+    result.matFloatDevice = createBuffer(state, matrixFloatSize, usageFlags, deviceMemoryFlags);
+    result.matColDevice   = createBuffer(state, matrixColSize, usageFlags, deviceMemoryFlags);
+    result.matRowDevice   = createBuffer(state, matrixRowSize, usageFlags, deviceMemoryFlags);
+    result.inVecDevice    = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
+    result.outVecDevice   = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
+
+    {
+        VKBufferAndMemory ssbo = result.matFloatHost;
+
+        void *mappedMemory = NULL;
+        vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+        u32 *u32MappedMemory = (u32 *)mappedMemory;
+        u32MappedMemory[0] = matrix->elementNum;
+        u32MappedMemory[1] = matrix->M;
+        u32MappedMemory[2] = matrix->N;
+        u32MappedMemory += 1;
+        mappedMemory = (void *)u32MappedMemory;
+        memcpy(mappedMemory, matrix->data, matrixFloatSize);
+        vkUnmapMemory(state->device, ssbo.bufferMemory);
+    }
+
+    {
+        VKBufferAndMemory ssbo = result.matRowHost;
+
+        void *mappedMemory = NULL;
+        vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+        memcpy(mappedMemory, matrix->row, matrixRowSize);
+        vkUnmapMemory(state->device, ssbo.bufferMemory);
+    }
+
+    {
+        VKBufferAndMemory ssbo = result.matColHost;
+
+        void *mappedMemory = NULL;
+        vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+        memcpy(mappedMemory, matrix->col, matrixColSize);
+        vkUnmapMemory(state->device, ssbo.bufferMemory);
+    }
+
+    InVecToSSBO(state, vec, result.inVecHost);
+
+    copyStagingBufferToDevice(state, result.matFloatHost, result.matFloatDevice);
+    copyStagingBufferToDevice(state, result.matRowHost,   result.matRowDevice);
+    copyStagingBufferToDevice(state, result.matColHost,   result.matColDevice);
+    copyStagingBufferToDevice(state, result.inVecHost,    result.inVecDevice);
+    copyStagingBufferToDevice(state, result.outVecHost,   result.outVecDevice);
+
+    VKBufferAndMemory buffers[] = { 
+        result.matFloatDevice,
+        result.matRowDevice,
+        result.matColDevice,
+        result.inVecDevice,
+        result.outVecDevice
+    };
+    u32 offsets[] = { 0, 0, 0, 0, 0 };
+
+    bindDescriptorSetWithBuffers(state, result.descriptorSet, buffers, offsets, ARRAY_LEN(buffers));
+
+    result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_coo.spv", result.descriptorSetLayout);
+
+    return result;
+}
+
+static void
+runScenarioCOOSimple(VKState *state, ScenarioCOOSimple *scn, COOMatrix *matrix, Vector expVec)
+{
+    u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
+    u32 dispatchY = 1;
+    u32 dispatchZ = 1;
+
+    scn->commandBuffer = createCommandBuffer(state, &scn->pipelineDefinition, &scn->descriptorSet,
+                                             dispatchX, dispatchY, dispatchZ);
+
+    RunInformation runInfo[RUNS_PER_VERSION] = { 0 };
+    for(u32 i = 0; i < RUNS_PER_VERSION; i++)
+    {
+        u32 nonZeroCount = matrix->elementNum;
+        runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
+        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e6;
+    }
+
+    copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
+    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+
+    saveRunInfo("COOSimple", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
+}
+
+static void
+destroyScenarioCOOSimple(VKState *state, ScenarioCOOSimple *scn)
+{
+    vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
+    vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+
+    destroyBuffer(state, &scn->outVecDevice);
+    destroyBuffer(state, &scn->inVecDevice);
+    destroyBuffer(state, &scn->matColDevice);
+    destroyBuffer(state, &scn->matRowDevice);
+    destroyBuffer(state, &scn->matFloatDevice);
+
+    destroyBuffer(state, &scn->outVecHost);
+    destroyBuffer(state, &scn->inVecHost);
+    destroyBuffer(state, &scn->matColHost);
+    destroyBuffer(state, &scn->matRowHost);
+    destroyBuffer(state, &scn->matFloatHost);
+
+    vkFreeDescriptorSets(state->device, scn->descriptorPool, 1, &scn->descriptorSet);
+    vkDestroyDescriptorPool(state->device, scn->descriptorPool, NULL);
+    vkDestroyDescriptorSetLayout(state->device, scn->descriptorSetLayout, NULL);
 }
 
 static ScenarioELLSimple
@@ -1848,6 +2028,10 @@ runTestsForMatrix(VKState *state, const char *filename)
     SELLMatrix matSELL = ELLToSELLMatrix(matELL);
     Vector vec = createRandomUnilateralVector(matELL.N);
     Vector expVec = ELLMatrixMulVec(matELL, vec);
+
+    ScenarioCOOSimple scnCOOSimple = createScenarioCOOSimple(state, &matCOO, vec);
+    runScenarioCOOSimple(state, &scnCOOSimple, &matCOO, expVec);
+    destroyScenarioCOOSimple(state, &scnCOOSimple);
 
     ScenarioELLSimple scnELLSimple = createScenarioELLSimple(state, &matELL, vec);
     runScenarioELLSimple(state, &scnELLSimple, &matELL, expVec);
