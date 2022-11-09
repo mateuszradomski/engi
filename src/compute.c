@@ -17,7 +17,7 @@
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
-#define RUNS_PER_VERSION 1
+#define RUNS_PER_VERSION 1000
 
 typedef struct VKDeviceAndComputeQueue
 {
@@ -1387,6 +1387,11 @@ runScenarioCOOSimple(VKState *state, ScenarioCOOSimple *scn, COOMatrix *matrix, 
     RunInformation runInfo[RUNS_PER_VERSION] = { 0 };
     for(u32 i = 0; i < RUNS_PER_VERSION; i++)
     {
+        // NOTE(radomski): Since we are always adding onto this output vector
+        // we need to assume that it's zero. We are zeroing it right here since
+        // the outVecHost holds zeroes for as long as we don't copy the last
+        // result into it.
+		copyStagingBufferToDevice(state, scn->outVecHost, scn->outVecDevice);
         u32 nonZeroCount = matrix->elementNum;
         runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
         runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e6;
