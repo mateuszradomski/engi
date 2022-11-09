@@ -17,7 +17,7 @@
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
-#define RUNS_PER_VERSION 1000
+#define RUNS_PER_VERSION 1
 
 typedef struct VKDeviceAndComputeQueue
 {
@@ -1296,8 +1296,8 @@ createScenarioCOOSimple(VKState *state, COOMatrix *matrix, Vector vec)
 
     // Staging buffers
     result.matFloatHost = createBuffer(state, matrixFloatSize, usageFlags, memoryFlags);
-    result.matColHost   = createBuffer(state, matrixRowSize, usageFlags, memoryFlags);
-    result.matRowHost   = createBuffer(state, matrixColSize, usageFlags, memoryFlags);
+    result.matRowHost   = createBuffer(state, matrixRowSize, usageFlags, memoryFlags);
+    result.matColHost   = createBuffer(state, matrixColSize, usageFlags, memoryFlags);
     result.inVecHost    = createBuffer(state, vectorSize, usageFlags, memoryFlags);
     result.outVecHost   = createBuffer(state, vectorSize, usageFlags, memoryFlags);
 
@@ -1317,7 +1317,7 @@ createScenarioCOOSimple(VKState *state, COOMatrix *matrix, Vector vec)
         u32MappedMemory[0] = matrix->elementNum;
         u32MappedMemory[1] = matrix->M;
         u32MappedMemory[2] = matrix->N;
-        u32MappedMemory += 1;
+        u32MappedMemory += 3;
         mappedMemory = (void *)u32MappedMemory;
         memcpy(mappedMemory, matrix->data, matrixFloatSize);
         vkUnmapMemory(state->device, ssbo.bufferMemory);
@@ -1361,14 +1361,14 @@ createScenarioCOOSimple(VKState *state, COOMatrix *matrix, Vector vec)
     bindDescriptorSetWithBuffers(state, result.descriptorSet, buffers, offsets, ARRAY_LEN(buffers));
 
     result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_coo.spv", result.descriptorSetLayout);
-
+    
     return result;
 }
 
 static void
 runScenarioCOOSimple(VKState *state, ScenarioCOOSimple *scn, COOMatrix *matrix, Vector expVec)
 {
-    u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
+    u32 dispatchX = DIV_CEIL(matrix->elementNum, WORKGROUP_SIZE);
     u32 dispatchY = 1;
     u32 dispatchZ = 1;
 

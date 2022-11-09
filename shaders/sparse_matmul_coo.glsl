@@ -1,5 +1,6 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
+#extension GL_KHR_memory_scope_semantics : enable
 
 #define WORKGROUP_SIZE 32
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1) in;
@@ -14,12 +15,12 @@ layout(set = 0, binding = 0) buffer bufA
 
 layout(set = 0, binding = 1) buffer bufARow
 {
-    uint row[];
+    uint rows[];
 };
 
 layout(set = 0, binding = 2) buffer bufACol
 {
-    uint col[];
+    uint cols[];
 };
 
 layout(set = 0, binding = 3) buffer inputVector
@@ -32,24 +33,28 @@ layout(set = 0, binding = 4) buffer outputVector
     float outVec[];
 };
 
+layout(set = 0, binding = 4) buffer outputVectorU32
+{
+    uint outVecU32[];
+};
+
+
 void main()
 {
     const uint ii = gl_GlobalInvocationID.x;
 
     if(ii < elementNum) { 
-        const uint row = row[ii];
-        const uint col = col[ii];
-        const uint index = (row - 1) * M + (col - 1);
-        float INDATA = data[index] * inVec[row - 1];
+        const uint row = rows[ii] - 1;
+        const uint col = cols[ii] - 1;
 
-        uint MEM = floatBitsToUint(outVec[row]);
-        uint expected_mem = MEM;
-        float input_mem = (uintBitsToFloat(MEM) + INDATA);  //initially this is what we assume we want to put in here. 
-        uint returned_mem = atomicCompSwap(MEM, expected_mem, floatBitsToUint(input_mem)); //if data returned is what we expected it to be, we're good, we added to it successfully
+        float sum = data[ii] * inVec[col];
+        uint expected_mem = outVecU32[row];
+        float input_mem = outVec[row] + sum;  //initially this is what we assume we want to put in here. 
+        uint returned_mem = atomicCompSwap(outVecU32[row], expected_mem, floatBitsToUint(input_mem)); //if data returned is what we expected it to be, we're good, we added to it successfully
         while(returned_mem != expected_mem){ // if the data returned is something different, we know another thread completed its transaction, so we'll have to add to that instead. 
             expected_mem = returned_mem;
-            input_mem = (uintBitsToFloat(expected_mem) + INDATA);
-            returned_mem = atomicCompSwap(MEM, expected_mem, floatBitsToUint(input_mem));
+            input_mem = (uintBitsToFloat(expected_mem) + sum);
+            returned_mem = atomicCompSwap(outVecU32[row], expected_mem, floatBitsToUint(input_mem));
         }
     }
 }
