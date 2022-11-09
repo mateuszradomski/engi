@@ -1343,6 +1343,15 @@ createScenarioCOOSimple(VKState *state, COOMatrix *matrix, Vector vec)
 
     InVecToSSBO(state, vec, result.inVecHost);
 
+    {
+        VKBufferAndMemory ssbo = result.outVecHost;
+
+        void *mappedMemory = NULL;
+        vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+        memset(mappedMemory, 0, vectorSize);
+        vkUnmapMemory(state->device, ssbo.bufferMemory);
+    }
+
     copyStagingBufferToDevice(state, result.matFloatHost, result.matFloatDevice);
     copyStagingBufferToDevice(state, result.matRowHost,   result.matRowDevice);
     copyStagingBufferToDevice(state, result.matColHost,   result.matColDevice);
