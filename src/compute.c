@@ -2363,7 +2363,7 @@ createScenarioCSC(VKState *state, CSCMatrix *matrix, Vector vec)
     u32 matrixFloatSize           = matrix->elementNum*sizeof(matrix->data[0]);
     u32 matrixFloatSizeWithHeader = matrixFloatSize + HEADER_SIZE;
     u32 matrixRowIndexSize        = matrix->elementNum*sizeof(matrix->rowIndex[0]);
-    u32 matrixColOffsetsSize      = (matrix->M+2)*sizeof(matrix->columnOffsets[0]);
+    u32 matrixColOffsetsSize      = (matrix->N+2)*sizeof(matrix->columnOffsets[0]);
     u32 vectorSize                = matrix->N*sizeof(matrix->data[0]);
 
     VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -2569,12 +2569,9 @@ int main()
     printRunStats();
 #endif
 
-#if 0
+#if 1
     runTestsForMatrix(&state, "data/beaflw.mtx");
     printRunStats();
-#endif
-
-#if 1
     runTestsForMatrix(&state, "data/bcsstk30.mtx");
     printRunStats();
     runTestsForMatrix(&state, "data/bcsstk32.mtx");
