@@ -72,6 +72,14 @@ typedef struct CSRMatrix
     u32 elementNum;
 } CSRMatrix;
 
+typedef struct CSCMatrix
+{
+    float *data;
+    u32 M, N;
+    u32 *rowIndex, *columnOffsets;
+    u32 elementNum;
+} CSCMatrix;
+
 #define STMNT(S) do{ S }while(0)
 
 #define SLL_STACK_PUSH_(H,N) N->next=H,H=N
