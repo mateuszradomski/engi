@@ -1178,7 +1178,7 @@ ELLToSELLMatrix(ELLMatrix matrix)
     {
         memset(P, 0, result.C * sizeof(P[0]));
         u32 offset = i * result.C * matrix.P;
-        for(u32 sliceIdx = 0; sliceIdx < result.C; sliceIdx++)
+        for(u32 sliceIdx = 0; sliceIdx < result.C && sliceIdx < (result.M - i * result.C); sliceIdx++)
         {
             for(u32 Pi = 0; Pi < matrix.P; Pi++)
             {
@@ -1208,7 +1208,7 @@ ELLToSELLMatrix(ELLMatrix matrix)
     {
         u32 sliceP = (result.rowOffsets[i+1] - result.rowOffsets[i]) / result.C;
 
-        for(u32 sliceIdx = 0; sliceIdx < result.C; sliceIdx++)
+        for(u32 sliceIdx = 0; sliceIdx < result.C && sliceIdx < (result.M - i * result.C); sliceIdx++)
         {
             u32 ELLOffset = (sliceIdx * matrix.P) + (i * result.C * matrix.P);
             u32 SELLOffset = result.rowOffsets[i] + sliceIdx * sliceP;
@@ -1446,24 +1446,25 @@ createScenarioCOOSimple(VKState *state, COOMatrix *matrix, Vector vec)
     result.descriptorSet = createDescriptorSet(state->device, result.descriptorSetLayout, result.descriptorPool);
 
     const u32 HEADER_SIZE = sizeof(matrix->elementNum) + sizeof(matrix->N) + sizeof(matrix->M);
-    u32 matrixFloatSize = matrix->elementNum*sizeof(matrix->data[0]) + HEADER_SIZE;
-    u32 matrixRowSize = matrix->elementNum*sizeof(matrix->row[0]);
-    u32 matrixColSize = matrix->elementNum*sizeof(matrix->col[0]);
-    u32 vectorSize = matrix->N*sizeof(matrix->data[0]);
+    u32 matrixFloatSize           = matrix->elementNum*sizeof(matrix->data[0]);
+    u32 matrixFloatSizeWithHeader = matrixFloatSize + HEADER_SIZE;
+    u32 matrixRowSize             = matrix->elementNum*sizeof(matrix->row[0]);
+    u32 matrixColSize             = matrix->elementNum*sizeof(matrix->col[0]);
+    u32 vectorSize                = matrix->N*sizeof(matrix->data[0]);
 
     VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
     VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
     // Staging buffers
-    result.matFloatHost = createBuffer(state, matrixFloatSize, usageFlags, memoryFlags);
+    result.matFloatHost = createBuffer(state, matrixFloatSizeWithHeader, usageFlags, memoryFlags);
     result.matRowHost   = createBuffer(state, matrixRowSize, usageFlags, memoryFlags);
     result.matColHost   = createBuffer(state, matrixColSize, usageFlags, memoryFlags);
     result.inVecHost    = createBuffer(state, vectorSize, usageFlags, memoryFlags);
     result.outVecHost   = createBuffer(state, vectorSize, usageFlags, memoryFlags);
 
     // On device memory buffers
-    result.matFloatDevice = createBuffer(state, matrixFloatSize, usageFlags, deviceMemoryFlags);
+    result.matFloatDevice = createBuffer(state, matrixFloatSizeWithHeader, usageFlags, deviceMemoryFlags);
     result.matColDevice   = createBuffer(state, matrixColSize, usageFlags, deviceMemoryFlags);
     result.matRowDevice   = createBuffer(state, matrixRowSize, usageFlags, deviceMemoryFlags);
     result.inVecDevice    = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
@@ -2207,24 +2208,25 @@ createScenarioCSR(VKState *state, CSRMatrix *matrix, Vector vec)
     result.descriptorSet = createDescriptorSet(state->device, result.descriptorSetLayout, result.descriptorPool);
 
     const u32 HEADER_SIZE = sizeof(matrix->elementNum) + sizeof(matrix->N) + sizeof(matrix->M);
-    u32 matrixFloatSize       = matrix->elementNum*sizeof(matrix->data[0]) + HEADER_SIZE;
-    u32 matrixColumnIndexSize = matrix->elementNum*sizeof(matrix->columnIndex[0]);
-    u32 matrixRowOffsetsSize  = (matrix->M+2)*sizeof(matrix->rowOffsets[0]);
-    u32 vectorSize            = matrix->N*sizeof(matrix->data[0]);
+    u32 matrixFloatSize           = matrix->elementNum*sizeof(matrix->data[0]);
+    u32 matrixFloatSizeWithHeader = matrixFloatSize + HEADER_SIZE;
+    u32 matrixColumnIndexSize     = matrix->elementNum*sizeof(matrix->columnIndex[0]);
+    u32 matrixRowOffsetsSize      = (matrix->M+2)*sizeof(matrix->rowOffsets[0]);
+    u32 vectorSize                = matrix->N*sizeof(matrix->data[0]);
 
     VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
     VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
     // Staging buffers
-    result.matFloatHost      = createBuffer(state, matrixFloatSize, usageFlags, memoryFlags);
+    result.matFloatHost      = createBuffer(state, matrixFloatSizeWithHeader, usageFlags, memoryFlags);
     result.matRowOffsetsHost = createBuffer(state, matrixRowOffsetsSize, usageFlags, memoryFlags);
     result.matColIndexHost   = createBuffer(state, matrixColumnIndexSize, usageFlags, memoryFlags);
     result.inVecHost         = createBuffer(state, vectorSize, usageFlags, memoryFlags);
     result.outVecHost        = createBuffer(state, vectorSize, usageFlags, memoryFlags);
 
     // On device memory buffers
-    result.matFloatDevice      = createBuffer(state, matrixFloatSize, usageFlags, deviceMemoryFlags);
+    result.matFloatDevice      = createBuffer(state, matrixFloatSizeWithHeader, usageFlags, deviceMemoryFlags);
     result.matRowOffsetsDevice = createBuffer(state, matrixRowOffsetsSize, usageFlags, deviceMemoryFlags);
     result.matColIndexDevice   = createBuffer(state, matrixColumnIndexSize, usageFlags, deviceMemoryFlags);
     result.inVecDevice         = createBuffer(state, vectorSize, usageFlags, deviceMemoryFlags);
