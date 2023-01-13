@@ -64,6 +64,14 @@ typedef struct SELLMatrix
     u32 elementNum;
 } SELLMatrix;
 
+typedef struct CSRMatrix
+{
+    float *data;
+    u32 M, N;
+    u32 *columnIndex, *rowOffsets;
+    u32 elementNum;
+} CSRMatrix;
+
 #define STMNT(S) do{ S }while(0)
 
 #define SLL_STACK_PUSH_(H,N) N->next=H,H=N

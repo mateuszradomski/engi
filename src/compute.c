@@ -261,7 +261,7 @@ NextInSplit(StrSplitIter *it)
     u32 bytesLeft = it->strLength - alreadyRead;
 
     for (u32 i = 0;
-         (i < bytesLeft) && (it->delimLength < bytesLeft) &&
+         (i < bytesLeft) && (it->delimLength <= bytesLeft) &&
           !StringsMatchRaw(it->head, it->delimLength, it->delim, it->delimLength);
          i++)
     {
@@ -351,7 +351,7 @@ saveRunInfo(char *name, RunInformation *runInfo, u32 len, double maxEpsilon)
 }
 
 static void
-printRunsStats()
+printRunStats()
 {
     const char *col1 = "Name";
     const char *col2 = "Exec time [ms]";
@@ -1188,6 +1188,63 @@ ELLToSELLMatrix(ELLMatrix matrix)
 
 static void
 destroySELLMatrix(SELLMatrix mat)
+{
+    free(mat.data);
+    free(mat.columnIndex);
+    free(mat.rowOffsets);
+}
+
+static CSRMatrix
+ELLToCSRMatrix(ELLMatrix matrix)
+{
+    double start = getWallTime();
+    CSRMatrix result = { 0 };
+
+    result.M = matrix.M;
+    result.N = matrix.N;
+    result.elementNum = matrix.elementNum; 
+
+    printf("[CSRMatrix Parse]: M = %u, N = %u\n", result.M, result.N);
+
+    u32 valuesSize         = result.elementNum * sizeof(result.data[0]);
+    u32 columnIndexesSize  = result.elementNum * sizeof(u32);
+    u32 rowOffsetsSize     = (result.M+2) * sizeof(u32);
+    u32 totalDataAllocated = valuesSize + columnIndexesSize + rowOffsetsSize;
+
+    result.data        = malloc(valuesSize);
+    result.columnIndex = malloc(columnIndexesSize);
+    result.rowOffsets  = malloc(rowOffsetsSize);
+    result.rowOffsets[0] = 0;
+
+    u32 head = 0;
+    u32 rowHead = 1;
+    for(u32 row = 0; row < matrix.M; row++)
+    {
+        u32 p = 0;
+        for(; p < matrix.P; p++)
+        {
+            if(matrix.columnIndex[row * matrix.P + p] == INVALID_COLUMN) {
+                break;
+            }
+
+            result.data[head]        = matrix.data[row * matrix.P + p];
+            result.columnIndex[head] = matrix.columnIndex[row * matrix.P + p];
+            head += 1;
+        }
+
+        result.rowOffsets[rowHead] = result.rowOffsets[rowHead - 1] + p;
+        rowHead += 1;
+    }
+
+    double end = getWallTime();
+    printf("[CSRMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n",
+           end - start, TO_MEGABYTES(totalDataAllocated));
+
+    return result;
+}
+
+static void
+destroyCSRMatrix(CSRMatrix mat)
 {
     free(mat.data);
     free(mat.columnIndex);
@@ -2037,9 +2094,10 @@ runTestsForMatrix(VKState *state, const char *filename)
 {
     printf("=== [%31s] ===\n", filename);
 
-    COOMatrix matCOO = ReadMatrixFormatToCOO(filename);
-    ELLMatrix matELL = COOToELLMatrix(matCOO);
+    COOMatrix matCOO   = ReadMatrixFormatToCOO(filename);
+    ELLMatrix matELL   = COOToELLMatrix(matCOO);
     SELLMatrix matSELL = ELLToSELLMatrix(matELL);
+    CSRMatrix matCSR   = ELLToCSRMatrix(matELL);
     Vector vec = createRandomUnilateralVector(matELL.N);
     Vector expVec = ELLMatrixMulVec(matELL, vec);
 
@@ -2080,12 +2138,16 @@ int main()
     runTestsForCPUMatrixMul();
 #endif
 
+    runTestsForMatrix(&state, "data/test.mtx");
+    printRunStats();
+#if 0
     runTestsForMatrix(&state, "data/bcsstk30.mtx");
-    printRunsStats();
+    printRunStats();
     runTestsForMatrix(&state, "data/bcsstk32.mtx");
-    printRunsStats();
+    printRunStats();
     runTestsForMatrix(&state, "data/s3dkt3m2.mtx");
-    printRunsStats();
+    printRunStats();
+#endif
 
     return 0;
 }
