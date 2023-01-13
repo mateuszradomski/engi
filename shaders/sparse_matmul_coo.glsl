@@ -49,9 +49,9 @@ void main()
 
         float sum = data[ii] * inVec[col];
         uint expected_mem = outVecU32[row];
-        float input_mem = outVec[row] + sum;  //initially this is what we assume we want to put in here. 
-        uint returned_mem = atomicCompSwap(outVecU32[row], expected_mem, floatBitsToUint(input_mem)); //if data returned is what we expected it to be, we're good, we added to it successfully
-        while(returned_mem != expected_mem){ // if the data returned is something different, we know another thread completed its transaction, so we'll have to add to that instead. 
+        float input_mem = outVec[row] + sum;
+        uint returned_mem = atomicCompSwap(outVecU32[row], expected_mem, floatBitsToUint(input_mem));
+        while(returned_mem != expected_mem){
             expected_mem = returned_mem;
             input_mem = (uintBitsToFloat(expected_mem) + sum);
             returned_mem = atomicCompSwap(outVecU32[row], expected_mem, floatBitsToUint(input_mem));
