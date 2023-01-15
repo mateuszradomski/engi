@@ -15,6 +15,7 @@ glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_v3.glsl -o sparse_m
 glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_coo.glsl -o sparse_matmul_coo.spv
 glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_csr.glsl -o sparse_matmul_csr.spv
 glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_csc.glsl -o sparse_matmul_csc.spv
+glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_bsr.glsl -o sparse_matmul_bsr.spv
 popd
 
 @REM -fsanitize=address ^

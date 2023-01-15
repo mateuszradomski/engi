@@ -41,9 +41,10 @@ typedef struct Vector
 
 typedef struct COOMatrix
 {
-    float *data;
-    u32 *row, *col, elementNum;
+    u32 elementNum;
     u32 M, N;
+    float *data;
+    u32 *row, *col;
 } COOMatrix;
 
 // If in columnIndex means no data (zero) at that space
@@ -58,27 +59,43 @@ typedef struct ELLMatrix
 
 typedef struct SELLMatrix
 {
-    float *data;
     u32 M, N, C;
-    u32 *columnIndex, *rowOffsets;
     u32 elementNum;
+    float *data;
+    u32 *columnIndex, *rowOffsets;
 } SELLMatrix;
 
 typedef struct CSRMatrix
 {
-    float *data;
     u32 M, N;
-    u32 *columnIndex, *rowOffsets;
     u32 elementNum;
+    float *data;
+    u32 *columnIndex, *rowOffsets;
 } CSRMatrix;
 
 typedef struct CSCMatrix
 {
-    float *data;
     u32 M, N;
-    u32 *rowIndex, *columnOffsets;
     u32 elementNum;
+    float *data;
+    u32 *rowIndex, *columnOffsets;
 } CSCMatrix;
+
+// NOTE(radomski):
+//
+// Length of the arrays is the following
+// |       Array |             Length |
+// |-------------|--------------------|
+// |        data | nnzb * blockSize^2 |
+// |   rowOffset |               MB+1 |
+// | colIndicies |               nnzb |
+typedef struct BSRMatrix
+{
+    u32 blockSize;
+    u32 nnzb, MB, NB;
+    float *data; // length is 
+    u32 *rowOffsets, *colIndicies;
+} BSRMatrix;
 
 #define STMNT(S) do{ S }while(0)
 
