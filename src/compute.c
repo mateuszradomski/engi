@@ -59,6 +59,7 @@ isZeroes(void *buffer, u32 bufferSize)
 {
 #if 1 
     if(bufferSize % 8 == 0) {
+        assert(bufferSize != 0);
         u64 mask = 0;
         u64 *qwords = (u64 *)buffer;
         for(u32 i = 0; i < bufferSize / 8; i++)
@@ -1286,6 +1287,156 @@ ELLToBSRMatrix(ELLMatrix matrix, u32 blockSize)
 
     double end = getWallTime();
     printf("[BSRMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
+
+    return result;
+}
+
+static BSRMatrix
+ELLToBSRMatrixFast(ELLMatrix matrix, u32 blockSize)
+{
+    double start = getWallTime();
+    BSRMatrix result = { 0 };
+
+    result.blockSize = blockSize;
+    result.MB = DIV_CEIL(matrix.M, result.blockSize);
+    result.NB = DIV_CEIL(matrix.N, result.blockSize);
+
+    printf("[BSRMatrix Parse]: MB = %u, NB = %u\n", result.MB, result.NB);
+
+    u32 *rowFront = malloc(matrix.M * sizeof(u32));
+    memset(rowFront, 0, matrix.M * sizeof(u32));
+
+    for(u32 rowbi = 0; rowbi < result.MB; rowbi++) {
+        u32 globalRow = rowbi * blockSize;
+        bool hasColumns = true;
+        while(hasColumns)
+        {
+            hasColumns = false;
+
+            u32 smallestCol = U32_MAX;
+            for(u32 rbi = 0; rbi < blockSize && (globalRow + rbi < matrix.M); rbi++) {
+                for(u32 cbi = 0; cbi < blockSize; cbi++) {
+                    if(rowFront[globalRow + rbi] + cbi < matrix.P) {
+                        smallestCol = MIN(smallestCol, matrix.columnIndex[(globalRow + rbi) * matrix.P + rowFront[globalRow + rbi] + cbi]);
+                    }
+                }
+            }
+            if(smallestCol == U32_MAX) 
+            {
+                break;
+            }
+
+            u32 colOffsetInBlock = smallestCol % blockSize;
+            u32 smallestMultipleOfBlockSize = smallestCol - colOffsetInBlock;
+            bool hasNonZeroBlock = false;
+            for(u32 rbi = 0; rbi < blockSize && (globalRow + rbi < matrix.M); rbi++) {
+                int cbi = MIN(blockSize - 1, (matrix.N - (rbi) * matrix.P) - 1);
+                for(; cbi >= 0; cbi--) {
+                    if(rowFront[globalRow + rbi] + cbi < matrix.P) {
+                        if(matrix.columnIndex[(globalRow + rbi) * matrix.P + rowFront[globalRow + rbi] + cbi] < smallestMultipleOfBlockSize + blockSize) {
+                            hasNonZeroBlock = true;
+                            break;
+                        }
+                    }
+                }
+                rowFront[globalRow + rbi] += cbi + 1;
+                if(rowFront[globalRow + rbi] < matrix.P) {
+                    hasColumns = true;
+                }
+            }
+            if(hasNonZeroBlock) {
+                result.nnzb += 1;
+            }
+        } 
+    }
+    memset(rowFront, 0, matrix.M * sizeof(u32));
+
+    u32 floatDataSize   = result.nnzb * blockSize * blockSize * sizeof(float);
+    u32 rowOffsetsSize  = (result.MB+1) * sizeof(u32);
+    u32 colIndiciesSize = result.nnzb * sizeof(u32);
+    u32 totalDataAllocated = floatDataSize + rowOffsetsSize + colIndiciesSize;
+
+    result.data        = calloc(1, floatDataSize);
+    result.rowOffsets  = calloc(1, rowOffsetsSize);
+    result.colIndicies = calloc(1, colIndiciesSize);
+
+    u32 scratchBlockSize = sizeof(float) * blockSize * blockSize;
+    float *scratchBlock = malloc(scratchBlockSize);
+    memset(scratchBlock, 0, scratchBlockSize);
+
+    u8 *writeHead = (u8 *)result.data;
+    u32 colIndexHead = 0;
+    u32 rowOffsetsHead = 0; 
+    result.rowOffsets[rowOffsetsHead++] = 0;
+    for(u32 rowbi = 0; rowbi < result.MB; rowbi++) {
+        u32 globalRow = rowbi * blockSize;
+        bool hasColumns = true;
+        while(hasColumns)
+        {
+            hasColumns = false;
+
+            u32 smallestCol = U32_MAX;
+            for(u32 rbi = 0; rbi < blockSize && (globalRow + rbi < matrix.M); rbi++) {
+                for(u32 cbi = 0; cbi < blockSize; cbi++) {
+                    if(rowFront[globalRow + rbi] + cbi < matrix.P) {
+                        smallestCol = MIN(smallestCol, matrix.columnIndex[(globalRow + rbi) * matrix.P + rowFront[globalRow + rbi] + cbi]);
+                    }
+                }
+            }
+            if(smallestCol == U32_MAX) 
+            {
+                break;
+            }
+
+            u32 colOffsetInBlock = smallestCol % blockSize;
+            u32 smallestMultipleOfBlockSize = smallestCol - colOffsetInBlock;
+            for(u32 rbi = 0; rbi < blockSize && (globalRow + rbi < matrix.M); rbi++) {
+                int cbi = MIN(blockSize - 1, (matrix.N - (rbi) * matrix.P) - 1);
+                for(; cbi >= 0; cbi--) {
+                    if(rowFront[globalRow + rbi] + cbi < matrix.P) {
+                        u32 col = matrix.columnIndex[(globalRow + rbi) * matrix.P + rowFront[globalRow + rbi] + cbi];
+                        if(col < smallestMultipleOfBlockSize + blockSize) {
+                            for(u32 ei = 0; ei < cbi+1; ei++)
+                            {
+                                u32 col = matrix.columnIndex[(globalRow + rbi) * matrix.P + rowFront[globalRow + rbi] + ei];
+                                scratchBlock[(col - smallestMultipleOfBlockSize) + rbi * blockSize] = matrix.data[rowFront[globalRow + rbi] + (globalRow + rbi) * matrix.P + ei];
+                            }
+                            break;
+                        }
+                    }
+                }
+                rowFront[globalRow + rbi] += cbi + 1;
+                if(rowFront[globalRow + rbi] < matrix.P) {
+                    hasColumns = true;
+                }
+            }
+
+#if 1
+            // TODO(radomski): remove this transpose
+            for(u32 r = 0; r < blockSize; r++)
+            {
+                for(u32 c = 0; c < blockSize; c++)
+                {
+                    float *fWriteHead = (float *)writeHead;
+                    fWriteHead[r + c * blockSize] = scratchBlock[c + r * blockSize];
+                }
+            }
+#else
+            memcpy(writeHead, scratchBlock, scratchBlockSize);
+#endif
+            writeHead += scratchBlockSize;
+            result.colIndicies[colIndexHead++] = smallestMultipleOfBlockSize / blockSize;
+            result.rowOffsets[rowOffsetsHead] += 1;
+            memset(scratchBlock, 0, scratchBlockSize);
+        } 
+        if(rowOffsetsHead < result.MB) {
+            result.rowOffsets[rowOffsetsHead+1] = result.rowOffsets[rowOffsetsHead];
+        }
+        rowOffsetsHead += 1;
+    }
+
+    double end = getWallTime();
+    printf("[BSRMatrix Fast Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
@@ -2617,8 +2768,12 @@ runTestsForMatrix(VKState *state, const char *filename)
     CSRMatrix matCSR   = ELLToCSRMatrix(matELL);
     CSCMatrix matCSC   = ELLToCSCMatrix(matELL);
     BSRMatrix matBSR_2 = ELLToBSRMatrix(matELL, 2);
+    BSRMatrix matBSR_2Fast = ELLToBSRMatrixFast(matELL, 2);
     BSRMatrix matBSR_4 = ELLToBSRMatrix(matELL, 4);
+    BSRMatrix matBSR_4Fast = ELLToBSRMatrixFast(matELL, 4);
     BSRMatrix matBSR_8 = ELLToBSRMatrix(matELL, 8);
+    BSRMatrix matBSR_8Fast = ELLToBSRMatrixFast(matELL, 8);
+
     Vector vec = createRandomUnilateralVector(matELL.N);
     Vector expVec = ELLMatrixMulVec(matELL, vec);
 
@@ -2658,13 +2813,25 @@ runTestsForMatrix(VKState *state, const char *filename)
     runScenarioBSR(state, &scnBSR_2, &matBSR_2, expVec);
     destroyScenarioBSR(state, &scnBSR_2);
 
+    ScenarioBSR scnBSR_2Fast = createScenarioBSR(state, &matBSR_2Fast, vec);
+    runScenarioBSR(state, &scnBSR_2Fast, &matBSR_2Fast, expVec);
+    destroyScenarioBSR(state, &scnBSR_2Fast);
+
     ScenarioBSR scnBSR_4 = createScenarioBSR(state, &matBSR_4, vec);
     runScenarioBSR(state, &scnBSR_4, &matBSR_4, expVec);
     destroyScenarioBSR(state, &scnBSR_4);
 
+    ScenarioBSR scnBSR_4Fast = createScenarioBSR(state, &matBSR_4Fast, vec);
+    runScenarioBSR(state, &scnBSR_4Fast, &matBSR_4Fast, expVec);
+    destroyScenarioBSR(state, &scnBSR_4Fast);
+
     ScenarioBSR scnBSR_8 = createScenarioBSR(state, &matBSR_8, vec);
     runScenarioBSR(state, &scnBSR_8, &matBSR_8, expVec);
     destroyScenarioBSR(state, &scnBSR_8);
+
+    ScenarioBSR scnBSR_8Fast = createScenarioBSR(state, &matBSR_8Fast, vec);
+    runScenarioBSR(state, &scnBSR_8Fast, &matBSR_8Fast, expVec);
+    destroyScenarioBSR(state, &scnBSR_8Fast);
 
     destroyCOOMatrix(matCOO);
     destroyELLMatrix(matELL);
@@ -2675,6 +2842,9 @@ runTestsForMatrix(VKState *state, const char *filename)
     destroyBSRMatrix(matBSR_2);
     destroyBSRMatrix(matBSR_4);
     destroyBSRMatrix(matBSR_8);
+    destroyBSRMatrix(matBSR_2Fast);
+    destroyBSRMatrix(matBSR_4Fast);
+    destroyBSRMatrix(matBSR_8Fast);
 }
 
 int main()

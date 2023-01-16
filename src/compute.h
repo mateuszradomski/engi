@@ -13,6 +13,8 @@ typedef int16_t s16;
 typedef int32_t s32;
 typedef int64_t s64;
 
+#define U32_MAX ((u32)-1)
+
 typedef struct Data
 {
     u8 *bytes;
