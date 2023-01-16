@@ -97,6 +97,224 @@ typedef struct BSRMatrix
     u32 *rowOffsets, *colIndicies;
 } BSRMatrix;
 
+typedef struct VKDeviceAndComputeQueue
+{
+    VkDevice device;
+    VkQueue computeQueue;
+    u32 computeQueueFamilyIndex;
+} VKDeviceAndComputeQueue;
+
+typedef struct VKBufferAndMemory
+{
+    VkBuffer buffer;
+    VkDeviceMemory bufferMemory;
+    u32 bufferSize;
+} VKBufferAndMemory;
+
+typedef struct VKPipelineDefinition
+{
+    VkPipeline pipeline;
+    VkPipelineLayout pipelineLayout;
+} VKPipelineDefinition;
+
+typedef struct VKState
+{
+    VkInstance instance;
+    VkPhysicalDevice phyDevice;
+
+    VkDevice device;
+    VkQueue computeQueue;
+    u32 computeQueueFamilyIndex;
+
+    VkQueryPool queryPool;
+    VkCommandPool commandPool;
+} VKState;
+
+typedef struct ScenarioCOOSimple
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matFloatHost;
+    VKBufferAndMemory matRowHost;
+    VKBufferAndMemory matColHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matFloatDevice;
+    VKBufferAndMemory matColDevice;
+    VKBufferAndMemory matRowDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioCOOSimple;
+
+typedef struct ScenarioELLSimple
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioELLSimple;
+
+typedef struct ScenarioELLBufferOffset
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioELLBufferOffset;
+
+typedef struct ScenarioELL2Buffer
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matHost;
+    VKBufferAndMemory matFloatHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matDevice;
+    VKBufferAndMemory matFloatDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioELL2Buffer;
+
+typedef struct ScenarioSELL
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matHeaderAndColIndexHost;
+    VKBufferAndMemory matRowOffsetsHost;
+    VKBufferAndMemory matFloatHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matHeaderAndColIndexDevice;
+    VKBufferAndMemory matRowOffsetsDevice;
+    VKBufferAndMemory matFloatDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioSELL;
+
+typedef struct ScenarioSELLOffsets
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioSELLOffsets;
+
+typedef struct ScenarioCSR
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matFloatHost;
+    VKBufferAndMemory matColIndexHost;
+    VKBufferAndMemory matRowOffsetsHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matFloatDevice;
+    VKBufferAndMemory matColIndexDevice;
+    VKBufferAndMemory matRowOffsetsDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioCSR;
+
+typedef struct ScenarioCSC
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matFloatHost;
+    VKBufferAndMemory matRowIndexHost;
+    VKBufferAndMemory matColOffsetsHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matFloatDevice;
+    VKBufferAndMemory matRowIndexDevice;
+    VKBufferAndMemory matColOffsetsDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioCSC;
+
+typedef struct ScenarioBSR
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matFloatHost;
+    VKBufferAndMemory matRowOffsetsHost;
+    VKBufferAndMemory matColIndiciesHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matFloatDevice;
+    VKBufferAndMemory matRowOffsetsDevice;
+    VKBufferAndMemory matColIndiciesDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioBSR;
+
+
 #define STMNT(S) do{ S }while(0)
 
 #define SLL_STACK_PUSH_(H,N) N->next=H,H=N
