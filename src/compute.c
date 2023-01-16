@@ -1321,19 +1321,7 @@ ELLToBSRMatrix(ELLMatrix matrix, u32 blockSize)
                 }
             }
 
-#if 1
-            // TODO(radomski): remove this transpose
-            for(u32 r = 0; r < blockSize; r++)
-            {
-                for(u32 c = 0; c < blockSize; c++)
-                {
-                    float *fWriteHead = (float *)writeHead;
-                    fWriteHead[r + c * blockSize] = scratchBlock[c + r * blockSize];
-                }
-            }
-#else
             memcpy(writeHead, scratchBlock, scratchBlockSize);
-#endif
             writeHead += scratchBlockSize;
             result.colIndicies[colIndexHead++] = smallestMultipleOfBlockSize / blockSize;
             result.rowOffsets[rowOffsetsHead] += 1;

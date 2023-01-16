@@ -57,7 +57,7 @@ void main()
                 float rowSum = 0.0;
                 for(uint cbi = 0; cbi < blockSize; cbi++)
                 {
-                    rowSum += inVec[colbi * blockSize + cbi] * floatdata[blockOffset + rbi + cbi * blockSize];
+                    rowSum += inVec[colbi * blockSize + cbi] * floatdata[blockOffset + cbi + rbi * blockSize];
                 }
                 outVec[rowbi * blockSize + rbi] += rowSum;
             }
