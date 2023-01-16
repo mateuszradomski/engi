@@ -1334,7 +1334,7 @@ ELLToBSRMatrix(ELLMatrix matrix, u32 blockSize)
     }
 
     double end = getWallTime();
-    printf("[BSRMatrix Fast Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
+    printf("[BSRMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
