@@ -18,11 +18,11 @@ glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_csc.glsl -o sparse_
 glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_bsr.glsl -o sparse_matmul_bsr.spv
 popd
 
-@REM -fsanitize=address ^
-@REM -fsanitize=undefined ^
+set "COMP_FLAGS=-fsanitize=address -fsanitize=undefined"
+@REM set "COMP_FLAGS="
 
 clang ..\src\compute.c -std=c11 -o compute.exe ^
--g ^
+-g %COMP_FLAGS% ^
 -IC:\clibs\glfw-3.3.4\include ^
 -IC:\VulkanSDK\1.2.182.0\Include ^
 C:\clibs\glfw-3.3.4\lib-mingw-w64\libglfw3.a ^
