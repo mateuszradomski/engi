@@ -21,7 +21,7 @@
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
-#define RUNS_PER_VERSION 10
+#define RUNS_PER_VERSION 1000
 
 #define VK_CALL(f) 																				        \
 {																										\
@@ -1430,7 +1430,7 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, Vector expVec)
     float *floatData = NULL;
     vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, (void **)&floatData);
 
-    float epsilonLimit = 1e-3;
+    float epsilonLimit = 1e-4;
     float maxEpsilon = 0.0;
 
     for(u32 i = 0; i < expVec.len; i++)
@@ -2760,20 +2760,26 @@ int main()
     runTestsForCPUMatrixMul();
 #endif
 
-#if 1
+#if 0
     runTestsForMatrix(&state, "data/test.mtx");
     printRunStats();
 #endif
 
 #if 1
-    runTestsForMatrix(&state, "data/beaflw.mtx");
-    printRunStats();
-    runTestsForMatrix(&state, "data/bcsstk30.mtx");
-    printRunStats();
-    runTestsForMatrix(&state, "data/bcsstk32.mtx");
-    printRunStats();
-    runTestsForMatrix(&state, "data/s3dkt3m2.mtx");
-    printRunStats();
+    char *matricies[] = {
+        "data/beaflw.mtx",
+        "data/bcsstk02.mtx",
+        "data/bcsstk30.mtx",
+        "data/bcsstk32.mtx",
+        "data/s3dkt3m2.mtx",
+        "data/s3dkq4m2.mtx"
+    };
+
+    for(u32 i = 0; i < ARRAY_LEN(matricies); i++)
+    {
+        runTestsForMatrix(&state, matricies[i]);
+        printRunStats();
+    }
 #endif
 
     return 0;
