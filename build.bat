@@ -19,6 +19,7 @@ glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_bsr.glsl -o sparse_
 popd
 
 @REM -fsanitize=address ^
+@REM -fsanitize=undefined ^
 
 clang ..\src\compute.c -std=c11 -o compute.exe ^
 -g ^

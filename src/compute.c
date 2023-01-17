@@ -22,7 +22,7 @@
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
 #define RUNS_PER_VERSION 10
- 
+
 #define VK_CALL(f) 																				        \
 {																										\
     VkResult res = (f);																					\
@@ -58,7 +58,7 @@ randomUnilateral()
 static u32
 isZeroes(void *buffer, u32 bufferSize)
 {
-#if 1 
+#if 1
     if(bufferSize % 8 == 0) {
         assert(bufferSize != 0);
         u64 mask = 0;
@@ -324,7 +324,7 @@ findPhysicalDevice(VkInstance instance)
 
     VkPhysicalDevice *devicesArray = malloc(sizeof(VkPhysicalDevice) * deviceCount);
     VkResult ss = vkEnumeratePhysicalDevices(instance, &deviceCount, devicesArray);
-    
+
     // TODO(radomski): Choose the most powerfull GPU
     printf("[Vulkan Init]: deviceCount = %u\n", deviceCount);
     VkPhysicalDevice result = devicesArray[0];
@@ -966,7 +966,7 @@ COOToELLMatrix(COOMatrix matrix)
     totalDataAllocated += M * P * sizeof(result.columnIndex[0]);
 
     printf("[ELLMatrix Parse]: M = %u, N = %u, P = %u\n", result.M, result.N, result.P);
-    
+
     memset(result.data, 0, M*P*sizeof(result.data[0]));
     memset(result.columnIndex, 0xff, M*P*sizeof(result.columnIndex[0]));
 
@@ -1007,7 +1007,7 @@ ELLToSELLMatrix(ELLMatrix matrix)
     result.C = 2;
     result.M = matrix.M;
     result.N = matrix.N;
-    result.elementNum = matrix.elementNum; 
+    result.elementNum = matrix.elementNum;
 
     printf("[SELLMatrix Parse]: M = %u, N = %u, C = %u\n", result.M, result.N, result.C);
 
@@ -1092,7 +1092,7 @@ ELLToCSRMatrix(ELLMatrix matrix)
 
     result.M = matrix.M;
     result.N = matrix.N;
-    result.elementNum = matrix.elementNum; 
+    result.elementNum = matrix.elementNum;
 
     printf("[CSRMatrix Parse]: M = %u, N = %u\n", result.M, result.N);
 
@@ -1149,14 +1149,30 @@ ELLToCSCMatrix(ELLMatrix matrix)
 
     result.M = matrix.M;
     result.N = matrix.N;
-    result.elementNum = matrix.elementNum; 
+    result.elementNum = matrix.elementNum;
 
     printf("[CSCMatrix Parse]: M = %u, N = %u\n", result.M, result.N);
 
     u32 valuesSize         = result.elementNum * sizeof(result.data[0]);
     u32 rowIndexesSize     = result.elementNum * sizeof(u32);
-    u32 columnOffsets      = (result.N+2) * sizeof(u32);
+    u32 columnOffsets      = (result.N+1) * sizeof(u32);
     u32 totalDataAllocated = valuesSize + rowIndexesSize + columnOffsets;
+
+    // The idea is to 'transpose' the columnIndex table
+    u32 *rowIndicies = malloc(matrix.N * matrix.P * sizeof(u32));
+    u32 *colFront = calloc(1, matrix.N * sizeof(u32));
+    memset(rowIndicies, INVALID_COLUMN, matrix.N * matrix.P * sizeof(u32));
+    for(u32 row = 0; row < matrix.M; row++)
+    {
+        for(u32 p = 0; p < matrix.P; p++)
+        {
+            u32 colIndex = matrix.columnIndex[row * matrix.P + p];
+            if(colIndex != INVALID_COLUMN) {
+                rowIndicies[colFront[colIndex] + colIndex * matrix.P] = row;
+                colFront[colIndex] += 1;
+            }
+        }
+    }
 
     result.data          = malloc(valuesSize);
     result.rowIndex      = malloc(rowIndexesSize);
@@ -1165,26 +1181,35 @@ ELLToCSCMatrix(ELLMatrix matrix)
 
     u32 head = 0;
     u32 colHead = 1;
-    u32 *rowFront = malloc(result.M * sizeof(u32));
-    memset(rowFront, 0, result.M * sizeof(u32));
     for(u32 col = 0; col < matrix.N; col++)
     {
         u32 p = 0;
-        for(u32 row = 0; row < matrix.M; row++)
+        for(; p < matrix.P; p++)
         {
-            if(matrix.columnIndex[row * matrix.P + rowFront[row]] == col) {
-                result.data[head]     = matrix.data[row * matrix.P + rowFront[row]];
-                result.rowIndex[head] = row;
-                rowFront[row] += 1;
-                head += 1;
-                p += 1;
+            u32 rowIndex = rowIndicies[col * matrix.P + p];
+            if(rowIndex == INVALID_COLUMN) {
+                break;
             }
+
+            u32 pOffset = 0;
+            for(u32 pp = 0; pp < matrix.P; pp++)
+            {
+                if(matrix.columnIndex[rowIndex * matrix.P + pp] == col)
+                {
+                    pOffset = pp;
+                    break;
+                }
+            }
+
+            assert(matrix.columnIndex[rowIndex * matrix.P + pOffset] == col);
+            result.data[head]     = matrix.data[rowIndex * matrix.P + pOffset];
+            result.rowIndex[head] = rowIndex;
+            head += 1;
         }
 
         result.columnOffsets[colHead] = result.columnOffsets[colHead - 1] + p;
         colHead += 1;
     }
-    free(rowFront);
 
     double end = getWallTime();
     printf("[CSCMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n",
@@ -1231,7 +1256,7 @@ ELLToBSRMatrix(ELLMatrix matrix, u32 blockSize)
                     }
                 }
             }
-            if(smallestCol == U32_MAX) 
+            if(smallestCol == U32_MAX)
             {
                 break;
             }
@@ -1257,7 +1282,7 @@ ELLToBSRMatrix(ELLMatrix matrix, u32 blockSize)
             if(hasNonZeroBlock) {
                 result.nnzb += 1;
             }
-        } 
+        }
     }
     memset(rowFront, 0, matrix.M * sizeof(u32));
 
@@ -1276,7 +1301,7 @@ ELLToBSRMatrix(ELLMatrix matrix, u32 blockSize)
 
     u8 *writeHead = (u8 *)result.data;
     u32 colIndexHead = 0;
-    u32 rowOffsetsHead = 0; 
+    u32 rowOffsetsHead = 0;
     result.rowOffsets[rowOffsetsHead++] = 0;
     for(u32 rowbi = 0; rowbi < result.MB; rowbi++) {
         u32 globalRow = rowbi * blockSize;
@@ -1293,7 +1318,7 @@ ELLToBSRMatrix(ELLMatrix matrix, u32 blockSize)
                     }
                 }
             }
-            if(smallestCol == U32_MAX) 
+            if(smallestCol == U32_MAX)
             {
                 break;
             }
@@ -1326,7 +1351,7 @@ ELLToBSRMatrix(ELLMatrix matrix, u32 blockSize)
             result.colIndicies[colIndexHead++] = smallestMultipleOfBlockSize / blockSize;
             result.rowOffsets[rowOffsetsHead] += 1;
             memset(scratchBlock, 0, scratchBlockSize);
-        } 
+        }
         if(rowOffsetsHead < result.MB) {
             result.rowOffsets[rowOffsetsHead+1] = result.rowOffsets[rowOffsetsHead];
         }
@@ -1512,7 +1537,7 @@ createScenarioCOOSimple(VKState *state, COOMatrix *matrix, Vector vec)
     copyStagingBufferToDevice(state, result.inVecHost,    result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost,   result.outVecDevice);
 
-    VKBufferAndMemory buffers[] = { 
+    VKBufferAndMemory buffers[] = {
         result.matFloatDevice,
         result.matRowDevice,
         result.matColDevice,
@@ -1524,7 +1549,7 @@ createScenarioCOOSimple(VKState *state, COOMatrix *matrix, Vector vec)
     bindDescriptorSetWithBuffers(state, result.descriptorSet, buffers, offsets, ARRAY_LEN(buffers));
 
     result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_coo.spv", result.descriptorSetLayout);
-    
+
     return result;
 }
 
@@ -1632,7 +1657,7 @@ createScenarioELLSimple(VKState *state, ELLMatrix *matrix, Vector vec)
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
-    VKBufferAndMemory buffers[] = { 
+    VKBufferAndMemory buffers[] = {
         result.matDevice,
         result.inVecDevice,
         result.outVecDevice
@@ -1741,7 +1766,7 @@ createScenarioELLBufferOffset(VKState *state, ELLMatrix *matrix, Vector vec)
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
-    VKBufferAndMemory buffers[] = { 
+    VKBufferAndMemory buffers[] = {
         result.matDevice,
         result.matDevice,
         result.inVecDevice,
@@ -1865,7 +1890,7 @@ createScenarioELL2Buffer(VKState *state, ELLMatrix *matrix, Vector vec)
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
-    VKBufferAndMemory buffers[] = { 
+    VKBufferAndMemory buffers[] = {
         result.matDevice,
         result.matFloatDevice,
         result.inVecDevice,
@@ -2005,7 +2030,7 @@ createScenarioSELL(VKState *state, SELLMatrix *matrix, Vector vec)
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
-    VKBufferAndMemory buffers[] = { 
+    VKBufferAndMemory buffers[] = {
         result.matHeaderAndColIndexDevice,
         result.matRowOffsetsDevice,
         result.matFloatDevice,
@@ -2127,7 +2152,7 @@ createScenarioSELLOffsets(VKState *state, SELLMatrix *matrix, Vector vec)
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
 
-    VKBufferAndMemory buffers[] = { 
+    VKBufferAndMemory buffers[] = {
         result.matDevice,
         result.matDevice,
         result.matDevice,
@@ -2274,7 +2299,7 @@ createScenarioCSR(VKState *state, CSRMatrix *matrix, Vector vec)
     copyStagingBufferToDevice(state, result.inVecHost,         result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost,        result.outVecDevice);
 
-    VKBufferAndMemory buffers[] = { 
+    VKBufferAndMemory buffers[] = {
         result.matFloatDevice,
         result.matColIndexDevice,
         result.matRowOffsetsDevice,
@@ -2355,7 +2380,7 @@ createScenarioCSC(VKState *state, CSCMatrix *matrix, Vector vec)
     u32 matrixFloatSize           = matrix->elementNum*sizeof(matrix->data[0]);
     u32 matrixFloatSizeWithHeader = matrixFloatSize + HEADER_SIZE;
     u32 matrixRowIndexSize        = matrix->elementNum*sizeof(matrix->rowIndex[0]);
-    u32 matrixColOffsetsSize      = (matrix->N+2)*sizeof(matrix->columnOffsets[0]);
+    u32 matrixColOffsetsSize      = (matrix->N+1)*sizeof(matrix->columnOffsets[0]);
     u32 vectorSize                = matrix->N*sizeof(matrix->data[0]);
 
     VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -2426,7 +2451,7 @@ createScenarioCSC(VKState *state, CSCMatrix *matrix, Vector vec)
     copyStagingBufferToDevice(state, result.inVecHost,         result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost,        result.outVecDevice);
 
-    VKBufferAndMemory buffers[] = { 
+    VKBufferAndMemory buffers[] = {
         result.matFloatDevice,
         result.matRowIndexDevice,
         result.matColOffsetsDevice,
@@ -2584,7 +2609,7 @@ createScenarioBSR(VKState *state, BSRMatrix *matrix, Vector vec)
     copyStagingBufferToDevice(state, result.inVecHost,          result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost,         result.outVecDevice);
 
-    VKBufferAndMemory buffers[] = { 
+    VKBufferAndMemory buffers[] = {
         result.matFloatDevice,
         result.matRowOffsetsDevice,
         result.matColIndiciesDevice,
@@ -2735,7 +2760,7 @@ int main()
     runTestsForCPUMatrixMul();
 #endif
 
-#if 0
+#if 1
     runTestsForMatrix(&state, "data/test.mtx");
     printRunStats();
 #endif
