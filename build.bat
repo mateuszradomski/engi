@@ -6,12 +6,9 @@ pushd build
 if not exist "shaders" mkdir shaders
 
 pushd shaders
-@REM glslc.exe -O ..\..\shaders\matmul_v1.comp -o matmul_v1.spv
-@REM glslc.exe -O ..\..\shaders\matmul_v2.comp -o matmul_v2.spv
-@REM glslc.exe -O ..\..\shaders\matmul_v3.comp -o matmul_v3.spv
-glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_v1.glsl -o sparse_matmul_v1.spv
-glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_v2.glsl -o sparse_matmul_v2.spv
-glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_v3.glsl -o sparse_matmul_v3.spv
+glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_ell.glsl -o sparse_matmul_ell.spv
+glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_ell_offset.glsl -o sparse_matmul_ell_offset.spv
+glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_sell.glsl -o sparse_matmul_sell.spv
 glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_coo.glsl -o sparse_matmul_coo.spv
 glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_csr.glsl -o sparse_matmul_csr.spv
 glslc.exe -O -fshader-stage=comp ..\..\shaders\sparse_matmul_csc.glsl -o sparse_matmul_csc.spv

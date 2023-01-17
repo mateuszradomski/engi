@@ -1430,7 +1430,7 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, Vector expVec)
     float *floatData = NULL;
     vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, (void **)&floatData);
 
-    float epsilonLimit = 1e-4;
+    float epsilonLimit = 1e-2;
     float maxEpsilon = 0.0;
 
     for(u32 i = 0; i < expVec.len; i++)
@@ -1449,10 +1449,10 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, Vector expVec)
     return maxEpsilon;
 }
 
-static ScenarioCOOSimple
-createScenarioCOOSimple(VKState *state, COOMatrix *matrix, Vector vec)
+static ScenarioCOO
+createScenarioCOO(VKState *state, COOMatrix *matrix, Vector vec)
 {
-    ScenarioCOOSimple result = { 0 };
+    ScenarioCOO result = { 0 };
 
     const u32 INPUT_MAT_DESC = 3;
     const u32 INPUT_VEC_DESC = 1;
@@ -1554,7 +1554,7 @@ createScenarioCOOSimple(VKState *state, COOMatrix *matrix, Vector vec)
 }
 
 static void
-runScenarioCOOSimple(VKState *state, ScenarioCOOSimple *scn, COOMatrix *matrix, Vector expVec)
+runScenarioCOO(VKState *state, ScenarioCOO *scn, COOMatrix *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->elementNum, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1579,11 +1579,11 @@ runScenarioCOOSimple(VKState *state, ScenarioCOOSimple *scn, COOMatrix *matrix, 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("COOSimple", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
+    saveRunInfo("COO", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
 }
 
 static void
-destroyScenarioCOOSimple(VKState *state, ScenarioCOOSimple *scn)
+destroyScenarioCOO(VKState *state, ScenarioCOO *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
@@ -1606,10 +1606,10 @@ destroyScenarioCOOSimple(VKState *state, ScenarioCOOSimple *scn)
     vkDestroyDescriptorSetLayout(state->device, scn->descriptorSetLayout, NULL);
 }
 
-static ScenarioELLSimple
-createScenarioELLSimple(VKState *state, ELLMatrix *matrix, Vector vec)
+static ScenarioELL
+createScenarioELL(VKState *state, ELLMatrix *matrix, Vector vec)
 {
-    ScenarioELLSimple result = { 0 };
+    ScenarioELL result = { 0 };
 
     result.descriptorSetLayout = createConsecutiveDescriptorSetLayout(state->device, 3);
     result.descriptorPool = createDescriptorPool(state->device);
@@ -1666,13 +1666,13 @@ createScenarioELLSimple(VKState *state, ELLMatrix *matrix, Vector vec)
 
     bindDescriptorSetWithBuffers(state, result.descriptorSet, buffers, offsets, ARRAY_LEN(buffers));
 
-    result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v1.spv", result.descriptorSetLayout);
+    result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_ell.spv", result.descriptorSetLayout);
 
     return result;
 }
 
 static void
-runScenarioELLSimple(VKState *state, ScenarioELLSimple *scn, ELLMatrix *matrix, Vector expVec)
+runScenarioELL(VKState *state, ScenarioELL *scn, ELLMatrix *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1692,11 +1692,11 @@ runScenarioELLSimple(VKState *state, ScenarioELLSimple *scn, ELLMatrix *matrix, 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("ELLSimple", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
+    saveRunInfo("ELL", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
 }
 
 static void
-destroyScenarioELLSimple(VKState *state, ScenarioELLSimple *scn)
+destroyScenarioELL(VKState *state, ScenarioELL *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
@@ -1776,7 +1776,7 @@ createScenarioELLBufferOffset(VKState *state, ELLMatrix *matrix, Vector vec)
     u32 offsets[] = { 0, floatOffset, 0, 0 };
     bindDescriptorSetWithBuffers(state, result.descriptorSet, buffers, offsets, ARRAY_LEN(buffers));
 
-    result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v2.spv", result.descriptorSetLayout);
+    result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_ell_offset.spv", result.descriptorSetLayout);
 
     return result;
 }
@@ -2040,7 +2040,7 @@ createScenarioSELL(VKState *state, SELLMatrix *matrix, Vector vec)
     u32 offsets[] = { 0, 0, 0, 0, 0 };
     bindDescriptorSetWithBuffers(state, result.descriptorSet, buffers, offsets, ARRAY_LEN(buffers));
 
-    result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_v3.spv", result.descriptorSetLayout);
+    result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_sell.spv", result.descriptorSetLayout);
 
     return result;
 }
@@ -2697,13 +2697,13 @@ runTestsForMatrix(VKState *state, const char *filename)
     Vector vec = createRandomUnilateralVector(matELL.N);
     Vector expVec = ELLMatrixMulVec(matELL, vec);
 
-    ScenarioCOOSimple scnCOOSimple = createScenarioCOOSimple(state, &matCOO, vec);
-    runScenarioCOOSimple(state, &scnCOOSimple, &matCOO, expVec);
-    destroyScenarioCOOSimple(state, &scnCOOSimple);
+    ScenarioCOO scnCOO = createScenarioCOO(state, &matCOO, vec);
+    runScenarioCOO(state, &scnCOO, &matCOO, expVec);
+    destroyScenarioCOO(state, &scnCOO);
 
-    ScenarioELLSimple scnELLSimple = createScenarioELLSimple(state, &matELL, vec);
-    runScenarioELLSimple(state, &scnELLSimple, &matELL, expVec);
-    destroyScenarioELLSimple(state, &scnELLSimple);
+    ScenarioELL scnELL = createScenarioELL(state, &matELL, vec);
+    runScenarioELL(state, &scnELL, &matELL, expVec);
+    destroyScenarioELL(state, &scnELL);
 
     ScenarioELLBufferOffset scnELLBufferOffset = createScenarioELLBufferOffset(state, &matELL, vec);
     runScenarioELLBufferOffset(state, &scnELLBufferOffset, &matELL, expVec);

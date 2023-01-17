@@ -132,7 +132,7 @@ typedef struct VKState
     VkCommandPool commandPool;
 } VKState;
 
-typedef struct ScenarioCOOSimple
+typedef struct ScenarioCOO
 {
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
@@ -152,9 +152,9 @@ typedef struct ScenarioCOOSimple
 
     VKPipelineDefinition pipelineDefinition;
     VkCommandBuffer commandBuffer;
-} ScenarioCOOSimple;
+} ScenarioCOO;
 
-typedef struct ScenarioELLSimple
+typedef struct ScenarioELL
 {
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
@@ -170,7 +170,7 @@ typedef struct ScenarioELLSimple
 
     VKPipelineDefinition pipelineDefinition;
     VkCommandBuffer commandBuffer;
-} ScenarioELLSimple;
+} ScenarioELL;
 
 typedef struct ScenarioELLBufferOffset
 {
