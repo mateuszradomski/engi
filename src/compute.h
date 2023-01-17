@@ -37,7 +37,7 @@ typedef struct StrSplitIter
 
 typedef struct Vector
 {
-    float *data;
+    float *floatdata;
     u32 len;
 } Vector;
 
@@ -45,7 +45,7 @@ typedef struct COOMatrix
 {
     u32 elementNum;
     u32 M, N;
-    float *data;
+    float *floatdata;
     u32 *row, *col;
 } COOMatrix;
 
@@ -54,7 +54,7 @@ typedef struct COOMatrix
 
 typedef struct ELLMatrix
 {
-    float *data;
+    float *floatdata;
     u32 M, P, N, *columnIndex;
     u32 elementNum;
 } ELLMatrix;
@@ -63,7 +63,7 @@ typedef struct SELLMatrix
 {
     u32 M, N, C;
     u32 elementNum;
-    float *data;
+    float *floatdata;
     u32 *columnIndex, *rowOffsets;
 } SELLMatrix;
 
@@ -71,7 +71,7 @@ typedef struct CSRMatrix
 {
     u32 M, N;
     u32 elementNum;
-    float *data;
+    float *floatdata;
     u32 *columnIndex, *rowOffsets;
 } CSRMatrix;
 
@@ -79,7 +79,7 @@ typedef struct CSCMatrix
 {
     u32 M, N;
     u32 elementNum;
-    float *data;
+    float *floatdata;
     u32 *rowIndex, *columnOffsets;
 } CSCMatrix;
 
@@ -95,7 +95,7 @@ typedef struct BSRMatrix
 {
     u32 blockSize;
     u32 nnzb, MB, NB;
-    float *data; // length is 
+    float *floatdata; // length is 
     u32 *rowOffsets, *colIndicies;
 } BSRMatrix;
 
