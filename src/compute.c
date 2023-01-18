@@ -946,9 +946,9 @@ COOToELLMatrix(COOMatrix matrix)
     }
 
     u32 P = 0;
-    for(u32 rowIndex = 0; rowIndex < M; rowIndex++)
+    for(u32 rowIndices = 0; rowIndices < M; rowIndices++)
     {
-        P = MAX(P, PArray[rowIndex]);
+        P = MAX(P, PArray[rowIndices]);
     }
 
     free(PArray);
@@ -1154,9 +1154,9 @@ ELLToCSCMatrix(ELLMatrix matrix)
     printf("[CSCMatrix Parse]: M = %u, N = %u\n", result.M, result.N);
 
     u32 valuesSize         = result.elementNum * sizeof(result.floatdata[0]);
-    u32 rowIndexesSize     = result.elementNum * sizeof(u32);
+    u32 rowIndicesesSize     = result.elementNum * sizeof(u32);
     u32 columnOffsets      = (result.N+1) * sizeof(u32);
-    u32 totalDataAllocated = valuesSize + rowIndexesSize + columnOffsets;
+    u32 totalDataAllocated = valuesSize + rowIndicesesSize + columnOffsets;
 
     // The idea is to 'transpose' the columnIndices table
     u32 *rowIndicies = malloc(matrix.N * matrix.P * sizeof(u32));
@@ -1175,7 +1175,7 @@ ELLToCSCMatrix(ELLMatrix matrix)
     }
 
     result.floatdata          = malloc(valuesSize);
-    result.rowIndex      = malloc(rowIndexesSize);
+    result.rowIndices      = malloc(rowIndicesesSize);
     result.columnOffsets = malloc(columnOffsets);
     result.columnOffsets[0] = 0;
 
@@ -1186,24 +1186,24 @@ ELLToCSCMatrix(ELLMatrix matrix)
         u32 p = 0;
         for(; p < matrix.P; p++)
         {
-            u32 rowIndex = rowIndicies[col * matrix.P + p];
-            if(rowIndex == INVALID_COLUMN) {
+            u32 rowIndices = rowIndicies[col * matrix.P + p];
+            if(rowIndices == INVALID_COLUMN) {
                 break;
             }
 
             u32 pOffset = 0;
             for(u32 pp = 0; pp < matrix.P; pp++)
             {
-                if(matrix.columnIndices[rowIndex * matrix.P + pp] == col)
+                if(matrix.columnIndices[rowIndices * matrix.P + pp] == col)
                 {
                     pOffset = pp;
                     break;
                 }
             }
 
-            assert(matrix.columnIndices[rowIndex * matrix.P + pOffset] == col);
-            result.floatdata[head]     = matrix.floatdata[rowIndex * matrix.P + pOffset];
-            result.rowIndex[head] = rowIndex;
+            assert(matrix.columnIndices[rowIndices * matrix.P + pOffset] == col);
+            result.floatdata[head]     = matrix.floatdata[rowIndices * matrix.P + pOffset];
+            result.rowIndices[head] = rowIndices;
             head += 1;
         }
 
@@ -1222,7 +1222,7 @@ static void
 destroyCSCMatrix(CSCMatrix mat)
 {
     free(mat.floatdata);
-    free(mat.rowIndex);
+    free(mat.rowIndices);
     free(mat.columnOffsets);
 }
 
@@ -2379,7 +2379,7 @@ createScenarioCSC(VKState *state, CSCMatrix *matrix, Vector vec)
     const u32 HEADER_SIZE = sizeof(matrix->elementNum) + sizeof(matrix->N) + sizeof(matrix->M);
     u32 matrixFloatSize           = matrix->elementNum*sizeof(matrix->floatdata[0]);
     u32 matrixFloatSizeWithHeader = matrixFloatSize + HEADER_SIZE;
-    u32 matrixRowIndexSize        = matrix->elementNum*sizeof(matrix->rowIndex[0]);
+    u32 matrixRowIndexSize        = matrix->elementNum*sizeof(matrix->rowIndices[0]);
     u32 matrixColOffsetsSize      = (matrix->N+1)*sizeof(matrix->columnOffsets[0]);
     u32 vectorSize                = matrix->N*sizeof(matrix->floatdata[0]);
 
@@ -2421,7 +2421,7 @@ createScenarioCSC(VKState *state, CSCMatrix *matrix, Vector vec)
 
         void *mappedMemory = NULL;
         vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
-        memcpy(mappedMemory, matrix->rowIndex, matrixRowIndexSize);
+        memcpy(mappedMemory, matrix->rowIndices, matrixRowIndexSize);
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
@@ -2761,7 +2761,7 @@ int main()
 #endif
 
 #if 0
-    runTestsForMatrix(&state, "data/test.mtx");
+    runTestsForMatrix(&state, "data/test2.mtx");
     printRunStats();
 #endif
 

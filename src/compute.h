@@ -80,7 +80,7 @@ typedef struct CSCMatrix
     u32 M, N;
     u32 elementNum;
     float *floatdata;
-    u32 *rowIndex, *columnOffsets;
+    u32 *rowIndices, *columnOffsets;
 } CSCMatrix;
 
 // NOTE(radomski):
@@ -89,7 +89,7 @@ typedef struct CSCMatrix
 // |---------------|--------------------|
 // |          data | nnzb * blockSize^2 |
 // | columnIndices |               nnzb |
-// |     rowOffset |               MB+1 |
+// |    rowOffsets |               MB+1 |
 typedef struct BSRMatrix
 {
     u32 blockSize;
