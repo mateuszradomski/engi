@@ -49,13 +49,13 @@ typedef struct COOMatrix
     u32 *row, *col;
 } COOMatrix;
 
-// If in columnIndex means no data (zero) at that space
+// If in columnIndices means no data (zero) at that space
 #define INVALID_COLUMN 0xffffffff
 
 typedef struct ELLMatrix
 {
     float *floatdata;
-    u32 M, P, N, *columnIndex;
+    u32 M, P, N, *columnIndices;
     u32 elementNum;
 } ELLMatrix;
 
@@ -64,7 +64,7 @@ typedef struct SELLMatrix
     u32 M, N, C;
     u32 elementNum;
     float *floatdata;
-    u32 *columnIndex, *rowOffsets;
+    u32 *columnIndices, *rowOffsets;
 } SELLMatrix;
 
 typedef struct CSRMatrix
@@ -72,7 +72,7 @@ typedef struct CSRMatrix
     u32 M, N;
     u32 elementNum;
     float *floatdata;
-    u32 *columnIndex, *rowOffsets;
+    u32 *columnIndices, *rowOffsets;
 } CSRMatrix;
 
 typedef struct CSCMatrix
@@ -85,18 +85,17 @@ typedef struct CSCMatrix
 
 // NOTE(radomski):
 //
-// Length of the arrays is the following
-// |       Array |             Length |
-// |-------------|--------------------|
-// |        data | nnzb * blockSize^2 |
-// |   rowOffset |               MB+1 |
-// | colIndicies |               nnzb |
+// |         Array |             Length |
+// |---------------|--------------------|
+// |          data | nnzb * blockSize^2 |
+// | columnIndices |               nnzb |
+// |     rowOffset |               MB+1 |
 typedef struct BSRMatrix
 {
     u32 blockSize;
     u32 nnzb, MB, NB;
-    float *floatdata; // length is 
-    u32 *rowOffsets, *colIndicies;
+    float *floatdata;
+    u32 *rowOffsets, *columnIndices;
 } BSRMatrix;
 
 typedef struct VKDeviceAndComputeQueue
