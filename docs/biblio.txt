@@ -1,3 +1,10 @@
 https://math.nist.gov/MatrixMarket/
 
 https://www.researchgate.net/publication/333908749_Sparse_Matrix_Classification_on_Imbalanced_Datasets_Using_Convolutional_Neural_Networks
+https://www.nvidia.com/content/PDF/fermi_white_papers/P.Glaskowsky_NVIDIA%27s_Fermi-The_First_Complete_GPU_Architecture.pdf 
+o
+
+Using GPUs for mars simulation
+https://ieeexplore.ieee.org/abstract/document/9904457
+https://www.cs.cmu.edu/afs/cs/academic/class/15869-f11/www/readings/lindholm08_tesla.pdf // cite this as Tesla source
+https://sci-hub.st/10.1109/IMCSIT.2008.4747253 // banaś in this shiiit

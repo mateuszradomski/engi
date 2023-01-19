@@ -1,0 +1,16 @@
+|                     NVIDIA format | Reading | Computing |                                              Thoughts |                                                        Link |
+|-----------------------------------|:-------:|-----------|-------------------------------------------------------|-------------------------------------------------------------|
+|                  Coordinate (COO) |   DONE  |      Slow | very slow calc, do we need to bother with optimizing? | https://docs.nvidia.com/cuda/cusparse/index.html#coo-format |
+|       Compressed Sparse Row (CSR) |   DONE  |      Fast |                                                       | https://docs.nvidia.com/cuda/cusparse/index.html#csr-format |
+|    Compressed Sparse Column (CSC) |   DONE  |      Slow |                                                       | https://docs.nvidia.com/cuda/cusparse/index.html#csc-format |
+| Block Compressed Sparse Row (BSR) |   DONE  |      Fast |                                                       | https://docs.nvidia.com/cuda/cusparse/index.html#bsr-format |
+
+
+| Format name |           English extension |
+|:-----------:|-----------------------------|
+|     COO     |                  Coordinate |
+|     CSR     |       Compressed Sparse Row |
+|     CSC     |    Compressed Sparse Column |
+|     ELL     |                     ELLPACK |
+|     SELL    |              Sliced ELLPACK |
+|     BSR     | Block Compressed Sprase Row |
