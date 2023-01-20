@@ -798,12 +798,12 @@ destroyVector(Vector vec)
     free(vec.floatdata);
 }
 
-static COOMatrix
+static MatrixCOO
 ReadMatrixFormatToCOO(const char *filename)
 {
     Str str = readEntireFileStr(filename);
     double start = getWallTime();
-    COOMatrix result = { 0 };
+    MatrixCOO result = { 0 };
 
     bool isSymmetric = false;
 
@@ -848,7 +848,7 @@ ReadMatrixFormatToCOO(const char *filename)
         result.col = malloc(toAllocate);
         totalDataAllocated += 3 * toAllocate;
 
-        printf("[COOMatrix Parse]: MStr = %.*s, NStr = %.*s, ElementNum = %u\n",
+        printf("[MatrixCOO Parse]: MStr = %.*s, NStr = %.*s, ElementNum = %u\n",
                MStr.length, MStr.bytes, NStr.length, NStr.bytes, result.elementNum);
     }
 
@@ -903,25 +903,25 @@ ReadMatrixFormatToCOO(const char *filename)
     result.N = maxCol-minCol+1;
 
     double end = getWallTime();
-    printf("[COOMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n",
+    printf("[MatrixCOO Parse]: Parsing took %.2lfs and allocated %uMB\n",
            end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
 
 static void
-destroyCOOMatrix(COOMatrix mat)
+destroyMatrixCOO(MatrixCOO mat)
 {
     free(mat.floatdata);
     free(mat.row);
     free(mat.col);
 }
 
-static ELLMatrix
-COOToELLMatrix(COOMatrix matrix)
+static MatrixELL
+COOToMatrixELL(MatrixCOO matrix)
 {
     double start = getWallTime();
-    ELLMatrix result = { 0 };
+    MatrixELL result = { 0 };
 
     u32 minRow = INT_MAX;
     u32 minCol = INT_MAX;
@@ -965,7 +965,7 @@ COOToELLMatrix(COOMatrix matrix)
     totalDataAllocated += M*P*sizeof(result.floatdata[0]);
     totalDataAllocated += M * P * sizeof(result.columnIndices[0]);
 
-    printf("[ELLMatrix Parse]: M = %u, N = %u, P = %u\n", result.M, result.N, result.P);
+    printf("[MatrixELL Parse]: M = %u, N = %u, P = %u\n", result.M, result.N, result.P);
 
     memset(result.floatdata, 0, M*P*sizeof(result.floatdata[0]));
     memset(result.columnIndices, 0xff, M*P*sizeof(result.columnIndices[0]));
@@ -985,31 +985,31 @@ COOToELLMatrix(COOMatrix matrix)
     }
 
     double end = getWallTime();
-    printf("[ELLMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n",
+    printf("[MatrixELL Parse]: Parsing took %.2lfs and allocated %uMB\n",
            end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
 
 static void
-destroyELLMatrix(ELLMatrix mat)
+destroyMatrixELL(MatrixELL mat)
 {
     free(mat.floatdata);
     free(mat.columnIndices);
 }
 
-static SELLMatrix
-ELLToSELLMatrix(ELLMatrix matrix)
+static MatrixSELL
+ELLToMatrixSELL(MatrixELL matrix)
 {
     double start = getWallTime();
-    SELLMatrix result = { 0 };
+    MatrixSELL result = { 0 };
 
     result.C = 2;
     result.M = matrix.M;
     result.N = matrix.N;
     result.elementNum = matrix.elementNum;
 
-    printf("[SELLMatrix Parse]: M = %u, N = %u, C = %u\n", result.M, result.N, result.C);
+    printf("[MatrixSELL Parse]: M = %u, N = %u, C = %u\n", result.M, result.N, result.C);
 
     u32 totalDataAllocated = 0;
 
@@ -1070,31 +1070,31 @@ ELLToSELLMatrix(ELLMatrix matrix)
     }
 
     double end = getWallTime();
-    printf("[SELLMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n",
+    printf("[MatrixSELL Parse]: Parsing took %.2lfs and allocated %uMB\n",
            end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
 
 static void
-destroySELLMatrix(SELLMatrix mat)
+destroyMatrixSELL(MatrixSELL mat)
 {
     free(mat.floatdata);
     free(mat.columnIndices);
     free(mat.rowOffsets);
 }
 
-static CSRMatrix
-ELLToCSRMatrix(ELLMatrix matrix)
+static MatrixCSR
+ELLToMatrixCSR(MatrixELL matrix)
 {
     double start = getWallTime();
-    CSRMatrix result = { 0 };
+    MatrixCSR result = { 0 };
 
     result.M = matrix.M;
     result.N = matrix.N;
     result.elementNum = matrix.elementNum;
 
-    printf("[CSRMatrix Parse]: M = %u, N = %u\n", result.M, result.N);
+    printf("[MatrixCSR Parse]: M = %u, N = %u\n", result.M, result.N);
 
     u32 valuesSize         = result.elementNum * sizeof(result.floatdata[0]);
     u32 columnIndicesesSize  = result.elementNum * sizeof(u32);
@@ -1127,31 +1127,31 @@ ELLToCSRMatrix(ELLMatrix matrix)
     }
 
     double end = getWallTime();
-    printf("[CSRMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n",
+    printf("[MatrixCSR Parse]: Parsing took %.2lfs and allocated %uMB\n",
            end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
 
 static void
-destroyCSRMatrix(CSRMatrix mat)
+destroyMatrixCSR(MatrixCSR mat)
 {
     free(mat.floatdata);
     free(mat.columnIndices);
     free(mat.rowOffsets);
 }
 
-static CSCMatrix
-ELLToCSCMatrix(ELLMatrix matrix)
+static MatrixCSC
+ELLToMatrixCSC(MatrixELL matrix)
 {
     double start = getWallTime();
-    CSCMatrix result = { 0 };
+    MatrixCSC result = { 0 };
 
     result.M = matrix.M;
     result.N = matrix.N;
     result.elementNum = matrix.elementNum;
 
-    printf("[CSCMatrix Parse]: M = %u, N = %u\n", result.M, result.N);
+    printf("[MatrixCSC Parse]: M = %u, N = %u\n", result.M, result.N);
 
     u32 valuesSize         = result.elementNum * sizeof(result.floatdata[0]);
     u32 rowIndicesesSize     = result.elementNum * sizeof(u32);
@@ -1212,31 +1212,31 @@ ELLToCSCMatrix(ELLMatrix matrix)
     }
 
     double end = getWallTime();
-    printf("[CSCMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n",
+    printf("[MatrixCSC Parse]: Parsing took %.2lfs and allocated %uMB\n",
            end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
 
 static void
-destroyCSCMatrix(CSCMatrix mat)
+destroyMatrixCSC(MatrixCSC mat)
 {
     free(mat.floatdata);
     free(mat.rowIndices);
     free(mat.columnOffsets);
 }
 
-static BSRMatrix
-ELLToBSRMatrix(ELLMatrix matrix, u32 blockSize)
+static MatrixBSR
+ELLToMatrixBSR(MatrixELL matrix, u32 blockSize)
 {
     double start = getWallTime();
-    BSRMatrix result = { 0 };
+    MatrixBSR result = { 0 };
 
     result.blockSize = blockSize;
     result.MB = DIV_CEIL(matrix.M, result.blockSize);
     result.NB = DIV_CEIL(matrix.N, result.blockSize);
 
-    printf("[BSRMatrix Parse]: MB = %u, NB = %u\n", result.MB, result.NB);
+    printf("[MatrixBSR Parse]: MB = %u, NB = %u\n", result.MB, result.NB);
 
     u32 *rowFront = malloc(matrix.M * sizeof(u32));
     memset(rowFront, 0, matrix.M * sizeof(u32));
@@ -1359,13 +1359,13 @@ ELLToBSRMatrix(ELLMatrix matrix, u32 blockSize)
     }
 
     double end = getWallTime();
-    printf("[BSRMatrix Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
+    printf("[MatrixBSR Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
 
 static void
-destroyBSRMatrix(BSRMatrix mat)
+destroyMatrixBSR(MatrixBSR mat)
 {
     free(mat.floatdata);
     free(mat.rowOffsets);
@@ -1373,7 +1373,7 @@ destroyBSRMatrix(BSRMatrix mat)
 }
 
 static Vector
-ELLMatrixMulVec(ELLMatrix mat, Vector vec)
+MatrixELLMulVec(MatrixELL mat, Vector vec)
 {
     Vector result = getSetVector(0.0f, vec.len);
 
@@ -1392,13 +1392,13 @@ ELLMatrixMulVec(ELLMatrix mat, Vector vec)
 }
 
 static void
-runTestsForCPUMatrixMul()
+runTestsForMatrixCPUMul()
 {
-    COOMatrix matCOO = ReadMatrixFormatToCOO("data/bcsstk30.mtx");
-    ELLMatrix matELL = COOToELLMatrix(matCOO);
+    MatrixCOO matCOO = ReadMatrixFormatToCOO("data/bcsstk30.mtx");
+    MatrixELL matELL = COOToMatrixELL(matCOO);
     Vector vec = getSetVector(1.0, matELL.N);
 
-    Vector result = ELLMatrixMulVec(matELL, vec);
+    Vector result = MatrixELLMulVec(matELL, vec);
     assert(result.len == vec.len);
     for(u32 i = 0; i < vec.len; i++)
     {
@@ -1408,8 +1408,8 @@ runTestsForCPUMatrixMul()
         }
     }
 
-    destroyCOOMatrix(matCOO);
-    destroyELLMatrix(matELL);
+    destroyMatrixCOO(matCOO);
+    destroyMatrixELL(matELL);
     destroyVector(vec);
     destroyVector(result);
 }
@@ -1450,7 +1450,7 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, Vector expVec)
 }
 
 static ScenarioCOO
-createScenarioCOO(VKState *state, COOMatrix *matrix, Vector vec)
+createScenarioCOO(VKState *state, MatrixCOO *matrix, Vector vec)
 {
     ScenarioCOO result = { 0 };
 
@@ -1554,7 +1554,7 @@ createScenarioCOO(VKState *state, COOMatrix *matrix, Vector vec)
 }
 
 static void
-runScenarioCOO(VKState *state, ScenarioCOO *scn, COOMatrix *matrix, Vector expVec)
+runScenarioCOO(VKState *state, ScenarioCOO *scn, MatrixCOO *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->elementNum, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1607,7 +1607,7 @@ destroyScenarioCOO(VKState *state, ScenarioCOO *scn)
 }
 
 static ScenarioELL
-createScenarioELL(VKState *state, ELLMatrix *matrix, Vector vec)
+createScenarioELL(VKState *state, MatrixELL *matrix, Vector vec)
 {
     ScenarioELL result = { 0 };
 
@@ -1672,7 +1672,7 @@ createScenarioELL(VKState *state, ELLMatrix *matrix, Vector vec)
 }
 
 static void
-runScenarioELL(VKState *state, ScenarioELL *scn, ELLMatrix *matrix, Vector expVec)
+runScenarioELL(VKState *state, ScenarioELL *scn, MatrixELL *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1716,7 +1716,7 @@ destroyScenarioELL(VKState *state, ScenarioELL *scn)
 }
 
 static ScenarioELLBufferOffset
-createScenarioELLBufferOffset(VKState *state, ELLMatrix *matrix, Vector vec)
+createScenarioELLBufferOffset(VKState *state, MatrixELL *matrix, Vector vec)
 {
     ScenarioELLBufferOffset result = { 0 };
 
@@ -1782,7 +1782,7 @@ createScenarioELLBufferOffset(VKState *state, ELLMatrix *matrix, Vector vec)
 }
 
 static void
-runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, ELLMatrix *matrix, Vector expVec)
+runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, MatrixELL *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1826,7 +1826,7 @@ destroyScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn)
 }
 
 static ScenarioELL2Buffer
-createScenarioELL2Buffer(VKState *state, ELLMatrix *matrix, Vector vec)
+createScenarioELL2Buffer(VKState *state, MatrixELL *matrix, Vector vec)
 {
     ScenarioELL2Buffer result = { 0 };
 
@@ -1905,7 +1905,7 @@ createScenarioELL2Buffer(VKState *state, ELLMatrix *matrix, Vector vec)
 }
 
 static void
-runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, ELLMatrix *matrix, Vector expVec)
+runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, MatrixELL *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1951,7 +1951,7 @@ destroyScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn)
 }
 
 static ScenarioSELL
-createScenarioSELL(VKState *state, SELLMatrix *matrix, Vector vec)
+createScenarioSELL(VKState *state, MatrixSELL *matrix, Vector vec)
 {
     ScenarioSELL result = { 0 };
 
@@ -2046,7 +2046,7 @@ createScenarioSELL(VKState *state, SELLMatrix *matrix, Vector vec)
 }
 
 static void
-runScenarioSELL(VKState *state, ScenarioSELL *scn, SELLMatrix *matrix, Vector expVec)
+runScenarioSELL(VKState *state, ScenarioSELL *scn, MatrixSELL *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -2094,7 +2094,7 @@ destroyScenarioSELL(VKState *state, ScenarioSELL *scn)
 }
 
 static ScenarioSELLOffsets
-createScenarioSELLOffsets(VKState *state, SELLMatrix *matrix, Vector vec)
+createScenarioSELLOffsets(VKState *state, MatrixSELL *matrix, Vector vec)
 {
     ScenarioSELLOffsets result = { 0 };
 
@@ -2168,7 +2168,7 @@ createScenarioSELLOffsets(VKState *state, SELLMatrix *matrix, Vector vec)
 }
 
 static void
-runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, SELLMatrix *matrix, Vector expVec)
+runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, MatrixSELL *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -2212,7 +2212,7 @@ destroyScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn)
 }
 
 static ScenarioCSR
-createScenarioCSR(VKState *state, CSRMatrix *matrix, Vector vec)
+createScenarioCSR(VKState *state, MatrixCSR *matrix, Vector vec)
 {
     ScenarioCSR result = { 0 };
 
@@ -2316,7 +2316,7 @@ createScenarioCSR(VKState *state, CSRMatrix *matrix, Vector vec)
 }
 
 static void
-runScenarioCSR(VKState *state, ScenarioCSR *scn, CSRMatrix *matrix, Vector expVec)
+runScenarioCSR(VKState *state, ScenarioCSR *scn, MatrixCSR *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -2364,7 +2364,7 @@ destroyScenarioCSR(VKState *state, ScenarioCSR *scn)
 }
 
 static ScenarioCSC
-createScenarioCSC(VKState *state, CSCMatrix *matrix, Vector vec)
+createScenarioCSC(VKState *state, MatrixCSC *matrix, Vector vec)
 {
     ScenarioCSC result = { 0 };
 
@@ -2468,7 +2468,7 @@ createScenarioCSC(VKState *state, CSCMatrix *matrix, Vector vec)
 }
 
 static void
-runScenarioCSC(VKState *state, ScenarioCSC *scn, CSCMatrix *matrix, Vector expVec)
+runScenarioCSC(VKState *state, ScenarioCSC *scn, MatrixCSC *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->N, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -2521,7 +2521,7 @@ destroyScenarioCSC(VKState *state, ScenarioCSC *scn)
 }
 
 static ScenarioBSR
-createScenarioBSR(VKState *state, BSRMatrix *matrix, Vector vec)
+createScenarioBSR(VKState *state, MatrixBSR *matrix, Vector vec)
 {
     ScenarioBSR result = { 0 };
 
@@ -2626,7 +2626,7 @@ createScenarioBSR(VKState *state, BSRMatrix *matrix, Vector vec)
 }
 
 static void
-runScenarioBSR(VKState *state, ScenarioBSR *scn, BSRMatrix *matrix, Vector expVec)
+runScenarioBSR(VKState *state, ScenarioBSR *scn, MatrixBSR *matrix, Vector expVec)
 {
     u32 dispatchX = DIV_CEIL(matrix->MB, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -2685,17 +2685,17 @@ runTestsForMatrix(VKState *state, const char *filename)
 {
     printf("=== [%31s] ===\n", filename);
 
-    COOMatrix matCOO   = ReadMatrixFormatToCOO(filename);
-    ELLMatrix matELL   = COOToELLMatrix(matCOO);
-    SELLMatrix matSELL = ELLToSELLMatrix(matELL);
-    CSRMatrix matCSR   = ELLToCSRMatrix(matELL);
-    CSCMatrix matCSC   = ELLToCSCMatrix(matELL);
-    BSRMatrix matBSR_2 = ELLToBSRMatrix(matELL, 2);
-    BSRMatrix matBSR_4 = ELLToBSRMatrix(matELL, 4);
-    BSRMatrix matBSR_8 = ELLToBSRMatrix(matELL, 8);
+    MatrixCOO matCOO   = ReadMatrixFormatToCOO(filename);
+    MatrixELL matELL   = COOToMatrixELL(matCOO);
+    MatrixSELL matSELL = ELLToMatrixSELL(matELL);
+    MatrixCSR matCSR   = ELLToMatrixCSR(matELL);
+    MatrixCSC matCSC   = ELLToMatrixCSC(matELL);
+    MatrixBSR matBSR_2 = ELLToMatrixBSR(matELL, 2);
+    MatrixBSR matBSR_4 = ELLToMatrixBSR(matELL, 4);
+    MatrixBSR matBSR_8 = ELLToMatrixBSR(matELL, 8);
 
     Vector vec = createRandomUnilateralVector(matELL.N);
-    Vector expVec = ELLMatrixMulVec(matELL, vec);
+    Vector expVec = MatrixELLMulVec(matELL, vec);
 
     ScenarioCOO scnCOO = createScenarioCOO(state, &matCOO, vec);
     runScenarioCOO(state, &scnCOO, &matCOO, expVec);
@@ -2741,15 +2741,15 @@ runTestsForMatrix(VKState *state, const char *filename)
     runScenarioBSR(state, &scnBSR_8, &matBSR_8, expVec);
     destroyScenarioBSR(state, &scnBSR_8);
 
-    destroyCOOMatrix(matCOO);
-    destroyELLMatrix(matELL);
-    destroySELLMatrix(matSELL);
+    destroyMatrixCOO(matCOO);
+    destroyMatrixELL(matELL);
+    destroyMatrixSELL(matSELL);
 
-    destroyCSRMatrix(matCSR);
-    destroyCSCMatrix(matCSC);
-    destroyBSRMatrix(matBSR_2);
-    destroyBSRMatrix(matBSR_4);
-    destroyBSRMatrix(matBSR_8);
+    destroyMatrixCSR(matCSR);
+    destroyMatrixCSC(matCSC);
+    destroyMatrixBSR(matBSR_2);
+    destroyMatrixBSR(matBSR_4);
+    destroyMatrixBSR(matBSR_8);
 }
 
 int main()
@@ -2757,7 +2757,7 @@ int main()
     VKState state = initalizeVulkan();
 
 #ifdef TESTS
-    runTestsForCPUMatrixMul();
+    runTestsForMatrixCPUMul();
 #endif
 
 #if 0

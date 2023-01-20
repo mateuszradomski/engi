@@ -41,47 +41,47 @@ typedef struct Vector
     u32 len;
 } Vector;
 
-typedef struct COOMatrix
+typedef struct MatrixCOO
 {
     u32 elementNum;
     u32 M, N;
     float *floatdata;
     u32 *row, *col;
-} COOMatrix;
+} MatrixCOO;
 
 // If in columnIndices means no data (zero) at that space
 #define INVALID_COLUMN 0xffffffff
 
-typedef struct ELLMatrix
+typedef struct MatrixELL
 {
     float *floatdata;
     u32 M, P, N, *columnIndices;
     u32 elementNum;
-} ELLMatrix;
+} MatrixELL;
 
-typedef struct SELLMatrix
+typedef struct MatrixSELL
 {
     u32 M, N, C;
     u32 elementNum;
     float *floatdata;
     u32 *columnIndices, *rowOffsets;
-} SELLMatrix;
+} MatrixSELL;
 
-typedef struct CSRMatrix
+typedef struct MatrixCSR
 {
     u32 M, N;
     u32 elementNum;
     float *floatdata;
     u32 *columnIndices, *rowOffsets;
-} CSRMatrix;
+} MatrixCSR;
 
-typedef struct CSCMatrix
+typedef struct MatrixCSC
 {
     u32 M, N;
     u32 elementNum;
     float *floatdata;
     u32 *rowIndices, *columnOffsets;
-} CSCMatrix;
+} MatrixCSC;
 
 // NOTE(radomski):
 //
@@ -90,13 +90,13 @@ typedef struct CSCMatrix
 // |          data | nnzb * blockSize^2 |
 // | columnIndices |               nnzb |
 // |    rowOffsets |               MB+1 |
-typedef struct BSRMatrix
+typedef struct MatrixBSR
 {
     u32 blockSize;
     u32 nnzb, MB, NB;
     float *floatdata;
     u32 *rowOffsets, *columnIndices;
-} BSRMatrix;
+} MatrixBSR;
 
 typedef struct VKDeviceAndComputeQueue
 {
