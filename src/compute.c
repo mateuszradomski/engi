@@ -841,7 +841,7 @@ ReadMatrixFormatToCOO(const char *filename)
         assert(MStr.bytes && NStr.bytes && ElementNumStr.bytes);
 
         u32 factor = isSymmetric ? 2 : 1;
-        result.elementNum = atoi(ElementNumStr.bytes) * factor;
+        result.elementNum = atoi(ElementNumStr.bytes) * factor - (factor - 1) * atoi(NStr.bytes);
         u32 toAllocate = result.elementNum * sizeof(result.floatdata[0]);
         result.floatdata = malloc(toAllocate);
         result.row = malloc(toAllocate);
@@ -860,7 +860,6 @@ ReadMatrixFormatToCOO(const char *filename)
         Str ValueStr = NextInSplit(&partIter);
         assert(RowStr.bytes && ColStr.bytes);
 
-
         u32 row = atoi(RowStr.bytes);
         u32 col = atoi(ColStr.bytes);
         result.row[elementIndex] = row;
@@ -869,23 +868,17 @@ ReadMatrixFormatToCOO(const char *filename)
         result.floatdata[elementIndex] = value;
         elementIndex += 1;
 
-        if(isSymmetric) {
-            if(col == row) {
-                result.elementNum -= 1;
-            } else {
-                result.row[elementIndex] = col;
-                result.col[elementIndex] = row;
-                result.floatdata[elementIndex] = value;
-                elementIndex += 1;
-            }
+        if(isSymmetric && col != row) {
+            result.row[elementIndex] = col;
+            result.col[elementIndex] = row;
+            result.floatdata[elementIndex] = value;
+            elementIndex += 1;
         }
     }
     assert(elementIndex == result.elementNum);
 
-    u32 minRow = INT_MAX;
-    u32 minCol = INT_MAX;
-    u32 maxRow = 0;
-    u32 maxCol = 0;
+    u32 minRow, minCol = INT_MAX;
+    u32 maxRow, maxCol = 0;
 
     for(int i = 0; i < result.elementNum; i++)
     {
