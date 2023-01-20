@@ -801,9 +801,10 @@ destroyVector(Vector vec)
 static MatrixCOO
 ReadMatrixFormatToCOO(const char *filename)
 {
+    MatrixCOO result = { 0 };
+
     Str str = readEntireFileStr(filename);
     double start = getWallTime();
-    MatrixCOO result = { 0 };
 
     bool isSymmetric = false;
 
@@ -833,7 +834,6 @@ ReadMatrixFormatToCOO(const char *filename)
     u32 totalDataAllocated = 0;
 
     {
-        // This line has M x N [element count]
         StrSplitIter partIter = StringSplit(StringTrim(line), " ");
         Str MStr = NextInSplit(&partIter);
         Str NStr = NextInSplit(&partIter);
@@ -848,12 +848,11 @@ ReadMatrixFormatToCOO(const char *filename)
         result.col = malloc(toAllocate);
         totalDataAllocated += 3 * toAllocate;
 
-        printf("[MatrixCOO Parse]: MStr = %.*s, NStr = %.*s, ElementNum = %u\n",
-               MStr.length, MStr.bytes, NStr.length, NStr.bytes, result.elementNum);
+        printf("[MatrixCOO Parse]: MStr = %.*s, NStr = %.*s, ElementNum = %u\n", MStr.length, MStr.bytes, NStr.length, NStr.bytes, result.elementNum);
     }
 
     u32 elementIndex = 0;
-    while((line = NextInSplit(&lineIter)).bytes != NULL)
+    while((line = NextInSplit(&lineIter)).bytes != NULL) // wczytuj następne linie pliku tak długą jak to możliwe
     {
         StrSplitIter partIter = StringSplit(StringTrim(line), " ");
         Str RowStr = NextInSplit(&partIter);
@@ -861,15 +860,12 @@ ReadMatrixFormatToCOO(const char *filename)
         Str ValueStr = NextInSplit(&partIter);
         assert(RowStr.bytes && ColStr.bytes);
 
-        float value = 1.0f;
-        if(ValueStr.length != 0) {
-            value = atof(ValueStr.bytes);
-        }
 
         u32 row = atoi(RowStr.bytes);
         u32 col = atoi(ColStr.bytes);
         result.row[elementIndex] = row;
         result.col[elementIndex] = col;
+        float value = ValueStr.length == 0 ? 1.0f : atof(ValueStr.bytes);
         result.floatdata[elementIndex] = value;
         elementIndex += 1;
 
@@ -903,8 +899,7 @@ ReadMatrixFormatToCOO(const char *filename)
     result.N = maxCol-minCol+1;
 
     double end = getWallTime();
-    printf("[MatrixCOO Parse]: Parsing took %.2lfs and allocated %uMB\n",
-           end - start, TO_MEGABYTES(totalDataAllocated));
+    printf("[MatrixCOO Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }

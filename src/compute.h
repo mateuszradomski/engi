@@ -43,10 +43,9 @@ typedef struct Vector
 
 typedef struct MatrixCOO
 {
-    u32 elementNum;
-    u32 M, N;
-    float *floatdata;
-    u32 *row, *col;
+    u32 M, N, elementNum; // wymiar M x N i ilość elementów niezerowych
+    float *floatdata;     // tablica wartości elementów
+    u32 *row, *col;       // odpowiednio tablice rzędów i kolumn elementów
 } MatrixCOO;
 
 // If in columnIndices means no data (zero) at that space
