@@ -877,8 +877,8 @@ ReadMatrixFormatToCOO(const char *filename)
     }
     assert(elementIndex == result.elementNum);
 
-    u32 minRow, minCol = INT_MAX;
-    u32 maxRow, maxCol = 0;
+    u32 minRow = INT_MAX, minCol = INT_MAX;
+    u32 maxRow = 0,       maxCol = 0;
 
     for(int i = 0; i < result.elementNum; i++)
     {
