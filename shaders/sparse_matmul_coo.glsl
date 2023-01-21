@@ -19,8 +19,8 @@ void main() {
     const uint i = gl_GlobalInvocationID.x;
 
     if(i < elementNum) { 
-        const uint row = rows[i] - 1;
-        const uint col = cols[i] - 1;
+        const uint row = rows[i];
+        const uint col = cols[i];
 
         float sum = data[i] * inVec[col];
         uint expected_mem = outVecU32[row];

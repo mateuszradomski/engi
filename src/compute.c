@@ -839,6 +839,8 @@ ReadMatrixFormatToCOO(const char *filename)
         Str NStr = NextInSplit(&partIter);
         Str ElementNumStr = NextInSplit(&partIter);
         assert(MStr.bytes && NStr.bytes && ElementNumStr.bytes);
+        result.M = atoi(MStr.bytes);
+        result.N = atoi(NStr.bytes);
 
         u32 factor = isSymmetric ? 2 : 1;
         result.elementNum = atoi(ElementNumStr.bytes) * factor - (factor - 1) * atoi(NStr.bytes);
@@ -860,8 +862,8 @@ ReadMatrixFormatToCOO(const char *filename)
         Str ValueStr = NextInSplit(&partIter);
         assert(RowStr.bytes && ColStr.bytes);
 
-        u32 row = atoi(RowStr.bytes);
-        u32 col = atoi(ColStr.bytes);
+        u32 row = atoi(RowStr.bytes) - 1;
+        u32 col = atoi(ColStr.bytes) - 1;
         result.row[elementIndex] = row;
         result.col[elementIndex] = col;
         float value = ValueStr.length == 0 ? 1.0f : atof(ValueStr.bytes);
@@ -876,20 +878,6 @@ ReadMatrixFormatToCOO(const char *filename)
         }
     }
     assert(elementIndex == result.elementNum);
-
-    u32 minRow = INT_MAX, minCol = INT_MAX;
-    u32 maxRow = 0,       maxCol = 0;
-
-    for(int i = 0; i < result.elementNum; i++)
-    {
-        minRow = MIN(result.row[i], minRow);
-        minCol = MIN(result.col[i], minCol);
-        maxRow = MAX(result.row[i], maxRow);
-        maxCol = MAX(result.col[i], maxCol);
-    }
-
-    result.M = maxRow-minRow+1;
-    result.N = maxCol-minCol+1;
 
     double end = getWallTime();
     printf("[MatrixCOO Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
@@ -911,30 +899,19 @@ COOToMatrixELL(MatrixCOO matrix)
     double start = getWallTime();
     MatrixELL result = { 0 };
 
-    u32 minRow = INT_MAX;
-    u32 minCol = INT_MAX;
-    u32 maxRow = 0;
-    u32 maxCol = 0;
+    result.M = matrix.M;
+    result.N = matrix.N;
 
-    for(int i = 0; i < matrix.elementNum; i++)
-    {
-        minRow = MIN(matrix.row[i], minRow);
-        minCol = MIN(matrix.col[i], minCol);
-        maxRow = MAX(matrix.row[i], maxRow);
-        maxCol = MAX(matrix.col[i], maxCol);
-    }
-
-    u32 M = maxRow-minRow+1;
-    u32 *PArray = malloc(M*sizeof(u32));
-    memset(PArray, 0, M*sizeof(u32));
+    u32 *PArray = malloc(result.M*sizeof(u32));
+    memset(PArray, 0, result.M*sizeof(u32));
 
     for (int i = 0; i < matrix.elementNum; i++)
     {
-        PArray[matrix.row[i] - minRow] += 1;
+        PArray[matrix.row[i]] += 1;
     }
 
     u32 P = 0;
-    for(u32 rowIndices = 0; rowIndices < M; rowIndices++)
+    for(u32 rowIndices = 0; rowIndices < result.M; rowIndices++)
     {
         P = MAX(P, PArray[rowIndices]);
     }
@@ -944,28 +921,26 @@ COOToMatrixELL(MatrixCOO matrix)
     u32 totalDataAllocated = 0;
 
     result.P = P;
-    result.M = M;
-    result.N = maxCol-minCol+1;
-    result.floatdata = malloc(M*P*sizeof(result.floatdata[0]));
-    result.columnIndices = malloc(M * P * sizeof(result.columnIndices[0]));
+    result.floatdata = malloc(result.M*P*sizeof(result.floatdata[0]));
+    result.columnIndices = malloc(result.M * P * sizeof(result.columnIndices[0]));
     result.elementNum = matrix.elementNum;
 
-    totalDataAllocated += M*P*sizeof(result.floatdata[0]);
-    totalDataAllocated += M * P * sizeof(result.columnIndices[0]);
+    totalDataAllocated += result.M*P*sizeof(result.floatdata[0]);
+    totalDataAllocated += result.M * P * sizeof(result.columnIndices[0]);
 
     printf("[MatrixELL Parse]: M = %u, N = %u, P = %u\n", result.M, result.N, result.P);
 
-    memset(result.floatdata, 0, M*P*sizeof(result.floatdata[0]));
-    memset(result.columnIndices, 0xff, M*P*sizeof(result.columnIndices[0]));
+    memset(result.floatdata, 0, result.M*P*sizeof(result.floatdata[0]));
+    memset(result.columnIndices, 0xff, result.M*P*sizeof(result.columnIndices[0]));
 
     for (int i = 0; i < matrix.elementNum; i++)
     {
-        u32 startIndex = (matrix.row[i] - minRow) * result.P;
-        u32 endIndex = (matrix.row[i] - minRow + 1) * result.P;
+        u32 startIndex = matrix.row[i] * result.P;
+        u32 endIndex = (matrix.row[i] + 1) * result.P;
         for(u32 k = startIndex; k < endIndex; k++)
         {
             if(result.columnIndices[k] == INVALID_COLUMN) {
-                result.columnIndices[k] = matrix.col[i] - minCol;
+                result.columnIndices[k] = matrix.col[i];
                 result.floatdata[k] = matrix.floatdata[i];
                 break;
             }
@@ -973,8 +948,7 @@ COOToMatrixELL(MatrixCOO matrix)
     }
 
     double end = getWallTime();
-    printf("[MatrixELL Parse]: Parsing took %.2lfs and allocated %uMB\n",
-           end - start, TO_MEGABYTES(totalDataAllocated));
+    printf("[MatrixELL Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
