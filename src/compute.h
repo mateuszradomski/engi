@@ -53,33 +53,35 @@ typedef struct MatrixCOO
 
 typedef struct MatrixELL
 {
-    float *floatdata;
-    u32 M, P, N, *columnIndices;
-    u32 elementNum;
+    u32 M, N, elementNum; // wymiar M x N i ilość elementów niezerowych
+    u32 P;                // maksymalna liczba elementów niezerowych
+    float *floatdata;     // tablica wartości elementów
+    u32 *columnIndices;   // tablica kolumn elementów
 } MatrixELL;
 
 typedef struct MatrixSELL
 {
-    u32 M, N, C;
-    u32 elementNum;
-    float *floatdata;
-    u32 *columnIndices, *rowOffsets;
+    u32 M, N, C;        // wymiar M x N i wysokość paska
+    u32 elementNum;     // ilość elementów niezerowych
+    float *floatdata;   // tablica wartości elementów
+    u32 *columnIndices; // tablica kolumn elementów
+    u32 *rowOffsets;    // tablica pierwszego indeksu elementu w pasku
 } MatrixSELL;
 
 typedef struct MatrixCSR
 {
-    u32 M, N;
-    u32 elementNum;
-    float *floatdata;
-    u32 *columnIndices, *rowOffsets;
+    u32 M, N, elementNum; // wymiar M x N i ilość elementów niezerowych
+    float *floatdata;     // tablica wartości elementów
+    u32 *columnIndices;   // tablica kolumn elementów
+    u32 *rowOffsets;      // tablica pierwszego indeksu elementu w rzędzie
 } MatrixCSR;
 
 typedef struct MatrixCSC
 {
-    u32 M, N;
-    u32 elementNum;
-    float *floatdata;
-    u32 *rowIndices, *columnOffsets;
+    u32 M, N, elementNum; // wymiar M x N i ilość elementów niezerowych
+    float *floatdata;     // tablica wartości elementów
+    u32 *rowIndices;      // tablica rzędów elementów
+    u32 *columnOffsets;   // tablica pierwszego indeksu elementu w kolumnie
 } MatrixCSC;
 
 // NOTE(radomski):
@@ -91,10 +93,11 @@ typedef struct MatrixCSC
 // |    rowOffsets |               MB+1 |
 typedef struct MatrixBSR
 {
-    u32 blockSize;
-    u32 nnzb, MB, NB;
-    float *floatdata;
-    u32 *rowOffsets, *columnIndices;
+    u32 MB, NB, nnzb;   // wymiar MB x NB i ilość bloków niezerowych
+    u32 blockSize;      // rozmiar bloku
+    float *floatdata;   // tablica wartości elementów
+    u32 *rowOffsets;    // tablica pierwszego indeksu elementu w rzędzie
+    u32 *columnIndices; // tablica kolumn elementów
 } MatrixBSR;
 
 typedef struct VKDeviceAndComputeQueue
