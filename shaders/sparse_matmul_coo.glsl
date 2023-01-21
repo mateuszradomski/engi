@@ -1,12 +1,12 @@
 #version 450
 
+#extension GL_EXT_shader_atomic_float: enable
+
 #define WORKGROUP_SIZE 32
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1) in;
 
 layout(set = 0, binding = 0) buffer bufA {
-    uint elementNum;
-    uint M;
-    uint N;
+    uint elementNum, M, N;
     float data[];
 };
 layout(set = 0, binding = 1) buffer bufARow      { uint rows[]; };
@@ -23,15 +23,6 @@ void main() {
         const uint col = cols[i];
 
         float sum = data[i] * inVec[col];
-        uint expected_mem = outVecU32[row];
-        float input_mem = outVec[row] + sum;
-        uint returned_mem = atomicCompSwap(outVecU32[row], expected_mem,
-                                           floatBitsToUint(input_mem));
-        while(returned_mem != expected_mem) {
-            expected_mem = returned_mem;
-            input_mem = (uintBitsToFloat(expected_mem) + sum);
-            returned_mem = atomicCompSwap(outVecU32[row], expected_mem,
-                                          floatBitsToUint(input_mem));
-        }
+        atomicAdd(outVec[row], sum);
     }
 }

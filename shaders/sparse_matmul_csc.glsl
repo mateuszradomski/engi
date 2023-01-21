@@ -1,6 +1,5 @@
 #version 450
-#extension GL_ARB_separate_shader_objects : enable
-#extension GL_KHR_memory_scope_semantics : enable
+#extension GL_EXT_shader_atomic_float: enable
 
 #define WORKGROUP_SIZE 32
 layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1) in;
@@ -53,15 +52,7 @@ void main()
             const uint row = rowIndex[cellOffset];
 
             float sum = inVecTerm * floatdata[cellOffset];
-
-            uint expected_mem = outVecU32[row];
-            float input_mem = outVec[row] + sum;
-            uint returned_mem = atomicCompSwap(outVecU32[row], expected_mem, floatBitsToUint(input_mem));
-            while(returned_mem != expected_mem){
-                expected_mem = returned_mem;
-                input_mem = (uintBitsToFloat(expected_mem) + sum);
-                returned_mem = atomicCompSwap(outVecU32[row], expected_mem, floatBitsToUint(input_mem));
-            }
+            atomicAdd(outVec[row], sum);
         }
     }
 }
