@@ -351,8 +351,19 @@ typedef struct RunInfoList
 {
     RunInfoNode *head;
     RunInfoNode *tail;
-    u32 count;
 } RunInfoList;
+
+typedef struct RunInfoSummary
+{
+    char *name;
+    double timeAvg;
+    double timeSD;
+    double gflopAvg;
+    double gflopSD;
+    double maxError;
+    double padding1;
+    double padding2;
+} RunInfoSummary;
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))

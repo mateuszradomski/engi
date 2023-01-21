@@ -240,6 +240,29 @@ saveRunInfo(char *name, RunInformation *runInfo, u32 len, double maxError)
     memcpy(node->infos, runInfo, sizeof(RunInformation) * len);
 }
 
+static int
+compRunInfoSummaries(void *va, void *vb)
+{
+    RunInfoSummary *a = (RunInfoSummary *)(va);
+    RunInfoSummary *b = (RunInfoSummary *)(vb);
+    return a->gflopAvg > b->gflopAvg;
+}
+
+void sort(void * arr, size_t data_size, size_t elem_size, int(*compare)(void * x, void * y)){
+    size_t length = data_size/elem_size;
+    for(int i = 0; i<length; i++){
+        for(int j = 0; j<length-1; j++){
+            if(compare(arr + elem_size*j, arr + elem_size * (j+1)) > 0){
+                char temp[elem_size];
+                memcpy(temp,arr + elem_size*j,elem_size);
+                memcpy(arr + elem_size*j,arr + elem_size * (j+1), elem_size);
+                memcpy(arr + elem_size * (j+1),temp, elem_size);
+            };
+        }
+
+    }
+}
+
 static void
 printRunStats()
 {
@@ -253,6 +276,8 @@ printRunStats()
            col1, col2, col3, col4, col5, col6);
 
     RunInfoNode *node = runInfos.head;
+    RunInfoSummary *summaries = malloc(128 * sizeof(RunInfoSummary));
+    u32 summaryCount = 0;
     while(node)
     {
         double gflopSum = 0.0;
@@ -273,8 +298,13 @@ printRunStats()
         double gflopSD = sqrtf(gflopVar / (node->len - 1));
         double timeSD = sqrtf(timeVar / (node->len - 1));
 
-        printf("| %15s | %15f | %15f | %15f | %15f | %15f |\n",
-               node->name, timeAvg, timeSD, gflopAvg, gflopSD, node->maxError);
+        RunInfoSummary summary = {
+            node->name,
+            timeAvg, timeSD,
+            gflopAvg, gflopSD,
+            node->maxError
+        };
+        summaries[summaryCount++] = summary;
 
         SLL_QUEUE_POP(runInfos.head, runInfos.tail);
 
@@ -283,6 +313,19 @@ printRunStats()
         free(tmp->infos);
         free(tmp);
     }
+
+    sort(summaries, summaryCount * sizeof(RunInfoSummary), sizeof(RunInfoSummary), compRunInfoSummaries);
+
+    for(u32 i = 0; i < summaryCount; i++)
+    {
+        RunInfoSummary *s = &summaries[i];
+
+        printf("| %15s | %15f | %15f | %15f | %15f | %15f |\n",
+               s->name, s->timeAvg, s->timeSD, s->gflopAvg, s->gflopSD, s->maxError);
+    }
+
+
+    free(summaries);
 }
 
 static VkInstance
