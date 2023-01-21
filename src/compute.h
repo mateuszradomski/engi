@@ -343,7 +343,7 @@ typedef struct RunInfoNode
     RunInformation *infos;
     u32 len;
     char *name;
-    double maxEpsilon;
+    double maxError;
     struct RunInfoNode *next;
 } RunInfoNode;
 

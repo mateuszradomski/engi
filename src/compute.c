@@ -227,14 +227,14 @@ readEntireFileStr(const char *filename)
 }
 
 static void
-saveRunInfo(char *name, RunInformation *runInfo, u32 len, double maxEpsilon)
+saveRunInfo(char *name, RunInformation *runInfo, u32 len, double maxError)
 {
     RunInfoNode *node = malloc(sizeof(RunInfoNode));
 
     SLL_QUEUE_PUSH(runInfos.head, runInfos.tail, node);
 
     node->name = name;
-    node->maxEpsilon = maxEpsilon;
+    node->maxError = maxError;
     node->len = len;
     node->infos = malloc(sizeof(RunInformation) * len);
     memcpy(node->infos, runInfo, sizeof(RunInformation) * len);
@@ -248,7 +248,7 @@ printRunStats()
     const char *col3 = "Exec time SD";
     const char *col4 = "GFLOPs";
     const char *col5 = "GFLOPs SD";
-    const char *col6 = "Max epsilon";
+    const char *col6 = "Max error [%]";
     printf("| %15s | %15s | %15s | %15s | %15s | %15s |\n",
            col1, col2, col3, col4, col5, col6);
 
@@ -274,7 +274,7 @@ printRunStats()
         double timeSD = sqrtf(timeVar / (node->len - 1));
 
         printf("| %15s | %15f | %15f | %15f | %15f | %15f |\n",
-               node->name, timeAvg, timeSD, gflopAvg, gflopSD, node->maxEpsilon);
+               node->name, timeAvg, timeSD, gflopAvg, gflopSD, node->maxError);
 
         SLL_QUEUE_POP(runInfos.head, runInfos.tail);
 
@@ -1392,15 +1392,15 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, Vector expVec)
     float *floatData = NULL;
     vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, (void **)&floatData);
 
-    float epsilonLimit = 1e-2;
-    float maxEpsilon = 0.0;
+    float errorLimit = 1 / 1e2;
+    float maxError = 0.0;
 
     for(u32 i = 0; i < expVec.len; i++)
     {
-        float epsilon = fabs(floatData[i] - expVec.floatdata[i]);
-        maxEpsilon = MAX(epsilon, maxEpsilon);
+        float error = fabs(floatData[i] - expVec.floatdata[i]) / expVec.floatdata[i];
+        maxError = MAX(error, maxError);
 
-        if(epsilon > epsilonLimit) {
+        if(error > errorLimit) {
             printf("[Vector match check]: (i, lhs == rhs) => (%d, %f == %f)\n", i, floatData[i], expVec.floatdata[i]);
             success = false;
             break;
@@ -1408,7 +1408,7 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, Vector expVec)
     }
     vkUnmapMemory(state->device, ssbo.bufferMemory);
 
-    return maxEpsilon;
+    return maxError * 100.0f;
 }
 
 static ScenarioCOO
@@ -1539,9 +1539,9 @@ runScenarioCOO(VKState *state, ScenarioCOO *scn, MatrixCOO *matrix, Vector expVe
     }
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("COO", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
+    saveRunInfo("COO", runInfo, ARRAY_LEN(runInfo), maxError);
 }
 
 static void
@@ -1652,9 +1652,9 @@ runScenarioELL(VKState *state, ScenarioELL *scn, MatrixELL *matrix, Vector expVe
     }
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("ELL", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
+    saveRunInfo("ELL", runInfo, ARRAY_LEN(runInfo), maxError);
 }
 
 static void
@@ -1762,9 +1762,9 @@ runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, MatrixE
     }
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("ELLBufferOffset", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
+    saveRunInfo("ELLBufferOffset", runInfo, ARRAY_LEN(runInfo), maxError);
 }
 
 static void
@@ -1885,9 +1885,9 @@ runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, MatrixELL *matrix
     }
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("ELL2Buffer", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
+    saveRunInfo("ELL2Buffer", runInfo, ARRAY_LEN(runInfo), maxError);
 }
 
 static void
@@ -2026,9 +2026,9 @@ runScenarioSELL(VKState *state, ScenarioSELL *scn, MatrixSELL *matrix, Vector ex
     }
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("SELL", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
+    saveRunInfo("SELL", runInfo, ARRAY_LEN(runInfo), maxError);
 }
 
 static void
@@ -2148,9 +2148,9 @@ runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, MatrixSELL *mat
     }
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("SELLOffsets", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
+    saveRunInfo("SELLOffsets", runInfo, ARRAY_LEN(runInfo), maxError);
 }
 
 static void
@@ -2296,9 +2296,9 @@ runScenarioCSR(VKState *state, ScenarioCSR *scn, MatrixCSR *matrix, Vector expVe
     }
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("CSR", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
+    saveRunInfo("CSR", runInfo, ARRAY_LEN(runInfo), maxError);
 }
 
 static void
@@ -2453,9 +2453,9 @@ runScenarioCSC(VKState *state, ScenarioCSC *scn, MatrixCSC *matrix, Vector expVe
     }
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("CSC", runInfo, ARRAY_LEN(runInfo), maxEpsilon);
+    saveRunInfo("CSC", runInfo, ARRAY_LEN(runInfo), maxError);
 }
 
 static void
@@ -2611,11 +2611,11 @@ runScenarioBSR(VKState *state, ScenarioBSR *scn, MatrixBSR *matrix, Vector expVe
     }
 
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
-    double maxEpsilon = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+    double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
     char *name = malloc(16);
     sprintf(name, "BSR %d", matrix->blockSize);
-    saveRunInfo(name, runInfo, ARRAY_LEN(runInfo), maxEpsilon);
+    saveRunInfo(name, runInfo, ARRAY_LEN(runInfo), maxError);
 }
 
 static void
