@@ -1,5 +1,4 @@
 #version 450
-
 #extension GL_EXT_shader_atomic_float: enable
 
 #define WORKGROUP_SIZE 32
@@ -13,7 +12,6 @@ layout(set = 0, binding = 1) buffer bufARow      { uint rows[]; };
 layout(set = 0, binding = 2) buffer bufACol      { uint cols[]; };
 layout(set = 0, binding = 3) buffer bufInVec     { float inVec[]; };
 layout(set = 0, binding = 4) buffer bufOutVec    { float outVec[]; };
-layout(set = 0, binding = 4) buffer bufOutVecU32 { uint outVecU32[]; };
 
 void main() {
     const uint i = gl_GlobalInvocationID.x;

@@ -1058,14 +1058,14 @@ ELLToMatrixCSR(MatrixELL matrix)
 
     printf("[MatrixCSR Parse]: M = %u, N = %u\n", result.M, result.N);
 
-    u32 valuesSize         = result.elementNum * sizeof(result.floatdata[0]);
-    u32 columnIndicesesSize  = result.elementNum * sizeof(u32);
-    u32 rowOffsetsSize     = (result.M+2) * sizeof(u32);
-    u32 totalDataAllocated = valuesSize + columnIndicesesSize + rowOffsetsSize;
+    u32 valuesSize          = result.elementNum * sizeof(result.floatdata[0]);
+    u32 columnIndicesesSize = result.elementNum * sizeof(u32);
+    u32 rowOffsetsSize      = (result.M+1) * sizeof(u32);
+    u32 totalDataAllocated  = valuesSize + columnIndicesesSize + rowOffsetsSize;
 
-    result.floatdata        = malloc(valuesSize);
+    result.floatdata     = malloc(valuesSize);
     result.columnIndices = malloc(columnIndicesesSize);
-    result.rowOffsets  = malloc(rowOffsetsSize);
+    result.rowOffsets    = malloc(rowOffsetsSize);
     result.rowOffsets[0] = 0;
 
     u32 head = 0;
@@ -1073,13 +1073,8 @@ ELLToMatrixCSR(MatrixELL matrix)
     for(u32 row = 0; row < matrix.M; row++)
     {
         u32 p = 0;
-        for(; p < matrix.P; p++)
-        {
-            if(matrix.columnIndices[row * matrix.P + p] == INVALID_COLUMN) {
-                break;
-            }
-
-            result.floatdata[head]        = matrix.floatdata[row * matrix.P + p];
+        for(; p < matrix.P && matrix.columnIndices[row * matrix.P + p] != INVALID_COLUMN; p++) {
+            result.floatdata[head]     = matrix.floatdata[row * matrix.P + p];
             result.columnIndices[head] = matrix.columnIndices[row * matrix.P + p];
             head += 1;
         }
@@ -1089,8 +1084,7 @@ ELLToMatrixCSR(MatrixELL matrix)
     }
 
     double end = getWallTime();
-    printf("[MatrixCSR Parse]: Parsing took %.2lfs and allocated %uMB\n",
-           end - start, TO_MEGABYTES(totalDataAllocated));
+    printf("[MatrixCSR Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
 }
@@ -1116,29 +1110,27 @@ ELLToMatrixCSC(MatrixELL matrix)
     printf("[MatrixCSC Parse]: M = %u, N = %u\n", result.M, result.N);
 
     u32 valuesSize         = result.elementNum * sizeof(result.floatdata[0]);
-    u32 rowIndicesesSize     = result.elementNum * sizeof(u32);
+    u32 rowIndicesesSize   = result.elementNum * sizeof(u32);
     u32 columnOffsets      = (result.N+1) * sizeof(u32);
     u32 totalDataAllocated = valuesSize + rowIndicesesSize + columnOffsets;
 
     // The idea is to 'transpose' the columnIndices table
-    u32 *rowIndicies = malloc(matrix.N * matrix.P * sizeof(u32));
+    u32 *rowIndices = malloc(matrix.N * matrix.P * sizeof(u32));
     u32 *colFront = calloc(1, matrix.N * sizeof(u32));
-    memset(rowIndicies, INVALID_COLUMN, matrix.N * matrix.P * sizeof(u32));
-    for(u32 row = 0; row < matrix.M; row++)
-    {
-        for(u32 p = 0; p < matrix.P; p++)
-        {
+    memset(rowIndices, INVALID_COLUMN, matrix.N * matrix.P * sizeof(u32));
+    for(u32 row = 0; row < matrix.M; row++) {
+        for(u32 p = 0; p < matrix.P; p++) {
             u32 colIndex = matrix.columnIndices[row * matrix.P + p];
             if(colIndex != INVALID_COLUMN) {
-                rowIndicies[colFront[colIndex] + colIndex * matrix.P] = row;
+                rowIndices[colFront[colIndex] + colIndex * matrix.P] = row;
                 colFront[colIndex] += 1;
             }
         }
     }
 
-    result.floatdata          = malloc(valuesSize);
-    result.rowIndices      = malloc(rowIndicesesSize);
-    result.columnOffsets = malloc(columnOffsets);
+    result.floatdata        = malloc(valuesSize);
+    result.rowIndices       = malloc(rowIndicesesSize);
+    result.columnOffsets    = malloc(columnOffsets);
     result.columnOffsets[0] = 0;
 
     u32 head = 0;
@@ -1146,26 +1138,14 @@ ELLToMatrixCSC(MatrixELL matrix)
     for(u32 col = 0; col < matrix.N; col++)
     {
         u32 p = 0;
-        for(; p < matrix.P; p++)
-        {
-            u32 rowIndices = rowIndicies[col * matrix.P + p];
-            if(rowIndices == INVALID_COLUMN) {
-                break;
-            }
+        for(; p < matrix.P && rowIndices[col * matrix.P + p] != INVALID_COLUMN; p++) {
+            u32 ri = rowIndices[col * matrix.P + p];
+            u32 pp = 0;
+            for(;(pp < matrix.P) && (matrix.columnIndices[ri * matrix.P + pp] != col); pp++){}
 
-            u32 pOffset = 0;
-            for(u32 pp = 0; pp < matrix.P; pp++)
-            {
-                if(matrix.columnIndices[rowIndices * matrix.P + pp] == col)
-                {
-                    pOffset = pp;
-                    break;
-                }
-            }
-
-            assert(matrix.columnIndices[rowIndices * matrix.P + pOffset] == col);
-            result.floatdata[head]     = matrix.floatdata[rowIndices * matrix.P + pOffset];
-            result.rowIndices[head] = rowIndices;
+            assert(matrix.columnIndices[ri * matrix.P + pp] == col);
+            result.floatdata[head]  = matrix.floatdata[ri * matrix.P + pp];
+            result.rowIndices[head] = ri;
             head += 1;
         }
 
@@ -2190,7 +2170,7 @@ createScenarioCSR(VKState *state, MatrixCSR *matrix, Vector vec)
     u32 matrixFloatSize           = matrix->elementNum*sizeof(matrix->floatdata[0]);
     u32 matrixFloatSizeWithHeader = matrixFloatSize + HEADER_SIZE;
     u32 matrixColumnIndexSize     = matrix->elementNum*sizeof(matrix->columnIndices[0]);
-    u32 matrixRowOffsetsSize      = (matrix->M+2)*sizeof(matrix->rowOffsets[0]);
+    u32 matrixRowOffsetsSize      = (matrix->M+1)*sizeof(matrix->rowOffsets[0]);
     u32 vectorSize                = matrix->N*sizeof(matrix->floatdata[0]);
 
     VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
