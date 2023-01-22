@@ -328,6 +328,25 @@ printRunStats()
     free(summaries);
 }
 
+static bool
+areValidationLayersSupported()
+{
+    u32 layerCount;
+    vkEnumerateInstanceLayerProperties(&layerCount, 0x0);
+
+    VkLayerProperties *layers = malloc(layerCount * sizeof(layers[0]));
+    vkEnumerateInstanceLayerProperties(&layerCount, layers);
+
+    for(u32 i = 0; i < layerCount; i++)
+    {
+        if(strcmp(layers[i].layerName, "VK_LAYER_KHRONOS_validation") == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static VkInstance
 createInstance()
 {
@@ -344,8 +363,17 @@ createInstance()
     createInfo.flags = 0;
     createInfo.pApplicationInfo = &appInfo;
 
-    createInfo.enabledLayerCount = 0;
-    createInfo.ppEnabledLayerNames = NULL;
+    bool validationLayersSupported = areValidationLayersSupported();
+
+    if(validationLayersSupported) {
+        const char *layerName = "VK_LAYER_KHRONOS_validation";
+        createInfo.enabledLayerCount = 1;
+        createInfo.ppEnabledLayerNames = &layerName;
+    } else {
+        createInfo.enabledLayerCount = 0;
+        createInfo.ppEnabledLayerNames = NULL;
+    }
+
     createInfo.enabledExtensionCount = 0;
     createInfo.ppEnabledExtensionNames = NULL;
 
@@ -424,7 +452,7 @@ createDevice(VkPhysicalDevice phyDevice)
     VkPhysicalDeviceFeatures deviceFeatures = { 0 };
 
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.enabledLayerCount = 0; // TODO(radomski): add validation layers
+    deviceCreateInfo.enabledLayerCount = 0;
     deviceCreateInfo.ppEnabledLayerNames = NULL;
     deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
     deviceCreateInfo.queueCreateInfoCount = 1;
