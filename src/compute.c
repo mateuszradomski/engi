@@ -21,7 +21,7 @@
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
-#define RUNS_PER_VERSION 1000
+#define RUNS_PER_VERSION 100
 
 #define VK_CALL(f) 																				        \
 {																										\
@@ -508,12 +508,12 @@ findMemoryType(VkPhysicalDevice phyDevice, u32 memoryTypeBits, VkMemoryPropertyF
 }
 
 static VKBufferAndMemory
-createBuffer(VKState *state, u32 bufferSize, VkBufferUsageFlags bidUsageFlags, VkMemoryPropertyFlagBits memoryFlags)
+createBuffer(VKState *state, u32 bufferSize, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryFlags)
 {
     VkBufferCreateInfo bufferCreateInfo = { 0 };
     bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferCreateInfo.size = bufferSize;
-    bufferCreateInfo.usage = bidUsageFlags;
+    bufferCreateInfo.usage = usageFlags;
     bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     VkBuffer buffer = { 0 };
