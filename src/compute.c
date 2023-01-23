@@ -493,9 +493,15 @@ findMemoryType(VkPhysicalDevice phyDevice, u32 memoryTypeBits, VkMemoryPropertyF
     VkPhysicalDeviceMemoryProperties memoryProps;
     vkGetPhysicalDeviceMemoryProperties(phyDevice, &memoryProps);
 
-    // TODO(radomski): Read about it
-    // Source:
-    // https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPhysicalDeviceMemoryProperties.html
+    // NOTE(radomski): The upper function returns the supported types of
+    // memory. Since we can have many different heaps eg. local on chip memory
+    // and shared ram we have to specify which heap supports given type.
+    //
+    // Since we want to find memory that can be used with a given buffer we are
+    // using `memoryTypeBits`. It's a bitmask where the i'th bit tells you if
+    // the i'th memoryProperty memory type is supported for this buffer type.
+    // Otherwise we want to find a memory type that will support the properties
+    // we want or more - since the and in the second if condition.
     for (u32 memoryIndex = 0; memoryIndex < memoryProps.memoryTypeCount; ++memoryIndex)
     {
         if ((memoryTypeBits & (1 << memoryIndex)) &&
@@ -534,7 +540,7 @@ createBuffer(VKState *state, u32 bufferSize, VkBufferUsageFlags usageFlags, VkMe
     VKBufferAndMemory result = { 0 };
     result.buffer = buffer;
     result.bufferMemory = bufferMemory;
-    result.bufferSize = bufferSize;
+    result.bufferSize = bufferSize; // the actual size of this buffer is memoryReqs.size.
     return result;
 }
 
