@@ -1489,14 +1489,6 @@ createScenarioCOO(VKState *state, MatrixCOO *matrix, Vector vec)
 {
     ScenarioCOO result = { 0 };
 
-    const u32 INPUT_MAT_DESC = 3;
-    const u32 INPUT_VEC_DESC = 1;
-    const u32 OUTPUT_VEC_DESC = 1;
-    u32 descriptorCount = INPUT_MAT_DESC + INPUT_VEC_DESC + OUTPUT_VEC_DESC;
-    result.descriptorSetLayout = createConsecutiveDescriptorSetLayout(state->device, descriptorCount);
-    result.descriptorPool = createDescriptorPool(state->device);
-    result.descriptorSet = createDescriptorSet(state->device, result.descriptorSetLayout, result.descriptorPool);
-
     const u32 HEADER_SIZE = sizeof(matrix->elementNum) + sizeof(matrix->N) + sizeof(matrix->M);
     u32 matrixFloatSize           = matrix->elementNum*sizeof(matrix->floatdata[0]);
     u32 matrixFloatSizeWithHeader = matrixFloatSize + HEADER_SIZE;
@@ -1573,6 +1565,15 @@ createScenarioCOO(VKState *state, MatrixCOO *matrix, Vector vec)
     copyStagingBufferToDevice(state, result.matColHost,   result.matColDevice);
     copyStagingBufferToDevice(state, result.inVecHost,    result.inVecDevice);
     copyStagingBufferToDevice(state, result.outVecHost,   result.outVecDevice);
+
+
+    const u32 INPUT_MAT_DESC = 3;
+    const u32 INPUT_VEC_DESC = 1;
+    const u32 OUTPUT_VEC_DESC = 1;
+    u32 descriptorCount = INPUT_MAT_DESC + INPUT_VEC_DESC + OUTPUT_VEC_DESC;
+    result.descriptorPool      = createDescriptorPool(state->device);
+    result.descriptorSetLayout = createConsecutiveDescriptorSetLayout(state->device, descriptorCount);
+    result.descriptorSet       = createDescriptorSet(state->device, result.descriptorSetLayout, result.descriptorPool);
 
     VKBufferAndMemory buffers[] = {
         result.matFloatDevice,
