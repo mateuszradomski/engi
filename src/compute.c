@@ -14,9 +14,6 @@
 #include "expVector.h"
 #include <emmintrin.h>
 
-#define STB_DS_IMPLEMENTATION
-#include "stb_ds.h"
-
 #define WORKGROUP_SIZE 32
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
