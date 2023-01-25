@@ -342,7 +342,9 @@ typedef struct RunInfoNode
 {
     RunInformation *infos;
     u32 len;
+    u32 matrixSize;
     char *name;
+    char *filename;
     double maxError;
     struct RunInfoNode *next;
 } RunInfoNode;

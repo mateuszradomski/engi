@@ -230,7 +230,7 @@ readEntireFileStr(const char *filename)
 }
 
 static void
-saveRunInfo(char *name, RunInformation *runInfo, u32 len, double maxError)
+saveRunInfo(char *name, RunInformation *runInfo, u32 len, double maxError, u32 matrixSize, char *filename)
 {
     RunInfoNode *node = malloc(sizeof(RunInfoNode));
 
@@ -240,6 +240,8 @@ saveRunInfo(char *name, RunInformation *runInfo, u32 len, double maxError)
     node->maxError = maxError;
     node->len = len;
     node->infos = malloc(sizeof(RunInformation) * len);
+    node->matrixSize = matrixSize;
+    node->filename = filename;
     memcpy(node->infos, runInfo, sizeof(RunInformation) * len);
 }
 
@@ -248,7 +250,7 @@ compRunInfoSummaries(void *va, void *vb)
 {
     RunInfoSummary *a = (RunInfoSummary *)(va);
     RunInfoSummary *b = (RunInfoSummary *)(vb);
-    return a->gflopAvg > b->gflopAvg;
+    return a->timeAvg > b->timeAvg;
 }
 
 void sort(void * arr, size_t data_size, size_t elem_size, int(*compare)(void * x, void * y)){
@@ -267,6 +269,37 @@ void sort(void * arr, size_t data_size, size_t elem_size, int(*compare)(void * x
 }
 
 static void
+saveResultsToFile(RunInfoNode *node)
+{
+#if defined(WIN32)
+    char *basename = strstr(node->filename, "/") + 1;
+
+    char filename[MAX_PATH] = { 0 };
+    sprintf(filename, "result_%s_%s.json", basename, node->name);
+    HANDLE fileHandle = CreateFileA(filename, GENERIC_READ | GENERIC_WRITE, 0x0, 0x0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0x0);
+
+    char *scratchBuffer = malloc(8 * 1024 * 1024);
+    char *writeHead = scratchBuffer;
+
+    writeHead += sprintf(writeHead, "{ \"matrix_format\": \"%s\", \"matrix_name\": \"%s\", \"matrix_size\": %d, \"max_error\": %f,\n\"data\":[\n",
+                         node->name, node->filename, node->matrixSize, node->maxError);
+    for(u32 i = 0; i < node->len; i++)
+    {
+        writeHead += sprintf(writeHead, "{ \"gflop\": %f, \"time_ms\": %f },\n", node->infos[i].gflops, node->infos[i].time);
+    }
+    writeHead -= 2; // remove the last comma
+    writeHead += sprintf(writeHead, "]}");
+    unsigned long writtenByteCount = 0;
+    u64 bytesToWriteCount = ((size_t)writeHead - (size_t)scratchBuffer);
+    WriteFile(fileHandle, scratchBuffer, bytesToWriteCount, &writtenByteCount, 0x0);
+    assert(writtenByteCount == bytesToWriteCount);
+    free(scratchBuffer);
+
+    CloseHandle(fileHandle);
+#endif
+}
+
+static void
 printRunStats()
 {
     const char *col1 = "Name";
@@ -278,11 +311,23 @@ printRunStats()
     printf("| %15s | %15s | %15s | %15s | %15s | %15s |\n",
            col1, col2, col3, col4, col5, col6);
 
+    char *dirName = "results";
+    CreateDirectory(dirName, 0x0);
+    SetCurrentDirectory(dirName);
+
     RunInfoNode *node = runInfos.head;
+    char *basename = strstr(node->filename, "/") + 1;
+    char buffer[128] = { 0 };
+    strncpy(buffer, basename, (size_t)strstr(basename, ".") - (size_t)basename);
+    CreateDirectory(buffer, 0x0);
+    SetCurrentDirectory(buffer);
+
     RunInfoSummary *summaries = malloc(128 * sizeof(RunInfoSummary));
     u32 summaryCount = 0;
     while(node)
     {
+        saveResultsToFile(node);
+
         double gflopSum = 0.0;
         double timeSum = 0.0;
         for(u32 i = 0; i < node->len; i++) {
@@ -327,6 +372,7 @@ printRunStats()
                s->name, s->timeAvg, s->timeSD, s->gflopAvg, s->gflopSD, s->maxError);
     }
 
+    SetCurrentDirectory("../..");
 
     free(summaries);
 }
@@ -975,6 +1021,13 @@ ReadMatrixFormatToCOO(const char *filename)
     return result;
 }
 
+static u32
+getMemorySizeMatrixCOO(MatrixCOO mat)
+{
+    u32 size = mat.elementNum * sizeof(mat.floatdata[0]);
+    return size * 3;
+}
+
 static void
 destroyMatrixCOO(MatrixCOO mat)
 {
@@ -1041,6 +1094,15 @@ COOToMatrixELL(MatrixCOO matrix)
     printf("[MatrixELL Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
+}
+
+static u32
+getMemorySizeMatrixELL(MatrixELL mat)
+{
+    u32 size = 0;
+    size += mat.M * mat.P * sizeof(mat.floatdata[0]);
+    size += mat.M * mat.P * sizeof(mat.columnIndices[0]);
+    return size;
 }
 
 static void
@@ -1128,6 +1190,15 @@ ELLToMatrixSELL(MatrixELL matrix)
     return result;
 }
 
+static u32
+getMemorySizeMatrixSELL(MatrixSELL mat)
+{
+    u32 sliceCount = DIV_CEIL(mat.M, mat.C);
+    u32 elementsToAllocate = mat.rowOffsets[sliceCount];
+    u32 rawDataSize = elementsToAllocate * sizeof(mat.columnIndices[0]);
+    return 2 * rawDataSize;
+}
+
 static void
 destroyMatrixSELL(MatrixSELL mat)
 {
@@ -1177,6 +1248,16 @@ ELLToMatrixCSR(MatrixELL matrix)
     printf("[MatrixCSR Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
+}
+
+static u32
+getMemorySizeMatrixCSR(MatrixCSR mat)
+{
+    u32 valuesSize          = mat.elementNum * sizeof(mat.floatdata[0]);
+    u32 columnIndicesesSize = mat.elementNum * sizeof(u32);
+    u32 rowOffsetsSize      = (mat.M+1) * sizeof(u32);
+    u32 totalDataAllocated  = valuesSize + columnIndicesesSize + rowOffsetsSize;
+    return totalDataAllocated;
 }
 
 static void
@@ -1248,6 +1329,16 @@ ELLToMatrixCSC(MatrixELL matrix)
            end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
+}
+
+static u32
+getMemorySizeMatrixCSC(MatrixCSC mat)
+{
+    u32 valuesSize         = mat.elementNum * sizeof(mat.floatdata[0]);
+    u32 rowIndicesesSize   = mat.elementNum * sizeof(u32);
+    u32 columnOffsets      = (mat.N+1) * sizeof(u32);
+    u32 totalDataAllocated = valuesSize + rowIndicesesSize + columnOffsets;
+    return totalDataAllocated;
 }
 
 static void
@@ -1394,6 +1485,16 @@ ELLToMatrixBSR(MatrixELL matrix, u32 blockSize)
     printf("[MatrixBSR Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
 
     return result;
+}
+
+static u32
+getMemorySizeMatrixBSR(MatrixBSR mat)
+{
+    u32 floatDataSize   = mat.nnzb * mat.blockSize * mat.blockSize * sizeof(float);
+    u32 rowOffsetsSize  = (mat.MB+1) * sizeof(u32);
+    u32 columnIndicesSize = mat.nnzb * sizeof(u32);
+    u32 totalDataAllocated = floatDataSize + rowOffsetsSize + columnIndicesSize;
+    return totalDataAllocated;
 }
 
 static void
@@ -1589,7 +1690,7 @@ createScenarioCOO(VKState *state, MatrixCOO *matrix, Vector vec)
 }
 
 static void
-runScenarioCOO(VKState *state, ScenarioCOO *scn, MatrixCOO *matrix, Vector expVec)
+runScenarioCOO(VKState *state, ScenarioCOO *scn, MatrixCOO *matrix, Vector expVec, char *filename)
 {
     u32 dispatchX = DIV_CEIL(matrix->elementNum, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1614,7 +1715,7 @@ runScenarioCOO(VKState *state, ScenarioCOO *scn, MatrixCOO *matrix, Vector expVe
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("COO", runInfo, ARRAY_LEN(runInfo), maxError);
+    saveRunInfo("COO", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixCOO(*matrix), filename);
 }
 
 static void
@@ -1709,7 +1810,7 @@ createScenarioELL(VKState *state, MatrixELL *matrix, Vector vec)
 }
 
 static void
-runScenarioELL(VKState *state, ScenarioELL *scn, MatrixELL *matrix, Vector expVec)
+runScenarioELL(VKState *state, ScenarioELL *scn, MatrixELL *matrix, Vector expVec, char *filename)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1729,7 +1830,7 @@ runScenarioELL(VKState *state, ScenarioELL *scn, MatrixELL *matrix, Vector expVe
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("ELL", runInfo, ARRAY_LEN(runInfo), maxError);
+    saveRunInfo("ELL", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixELL(*matrix), filename);
 }
 
 static void
@@ -1822,7 +1923,7 @@ createScenarioELLBufferOffset(VKState *state, MatrixELL *matrix, Vector vec)
 }
 
 static void
-runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, MatrixELL *matrix, Vector expVec)
+runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, MatrixELL *matrix, Vector expVec, char *filename)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1842,7 +1943,7 @@ runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, MatrixE
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("ELLBufferOffset", runInfo, ARRAY_LEN(runInfo), maxError);
+    saveRunInfo("ELLBufferOffset", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixELL(*matrix), filename);
 }
 
 static void
@@ -1947,7 +2048,7 @@ createScenarioELL2Buffer(VKState *state, MatrixELL *matrix, Vector vec)
 }
 
 static void
-runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, MatrixELL *matrix, Vector expVec)
+runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, MatrixELL *matrix, Vector expVec, char *filename)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -1967,7 +2068,7 @@ runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, MatrixELL *matrix
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("ELL2Buffer", runInfo, ARRAY_LEN(runInfo), maxError);
+    saveRunInfo("ELL2Buffer", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixELL(*matrix), filename);
 }
 
 static void
@@ -2090,7 +2191,7 @@ createScenarioSELL(VKState *state, MatrixSELL *matrix, Vector vec)
 }
 
 static void
-runScenarioSELL(VKState *state, ScenarioSELL *scn, MatrixSELL *matrix, Vector expVec)
+runScenarioSELL(VKState *state, ScenarioSELL *scn, MatrixSELL *matrix, Vector expVec, char *filename)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -2110,7 +2211,7 @@ runScenarioSELL(VKState *state, ScenarioSELL *scn, MatrixSELL *matrix, Vector ex
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("SELL", runInfo, ARRAY_LEN(runInfo), maxError);
+    saveRunInfo("SELL", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixSELL(*matrix), filename);
 }
 
 static void
@@ -2219,7 +2320,7 @@ createScenarioSELLOffsets(VKState *state, MatrixSELL *matrix, Vector vec)
 }
 
 static void
-runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, MatrixSELL *matrix, Vector expVec)
+runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, MatrixSELL *matrix, Vector expVec, char *filename)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -2239,7 +2340,7 @@ runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, MatrixSELL *mat
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("SELLOffsets", runInfo, ARRAY_LEN(runInfo), maxError);
+    saveRunInfo("SELLOffsets", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixSELL(*matrix), filename);
 }
 
 static void
@@ -2369,7 +2470,7 @@ createScenarioCSR(VKState *state, MatrixCSR *matrix, Vector vec)
 }
 
 static void
-runScenarioCSR(VKState *state, ScenarioCSR *scn, MatrixCSR *matrix, Vector expVec)
+runScenarioCSR(VKState *state, ScenarioCSR *scn, MatrixCSR *matrix, Vector expVec, char *filename)
 {
     u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -2389,7 +2490,7 @@ runScenarioCSR(VKState *state, ScenarioCSR *scn, MatrixCSR *matrix, Vector expVe
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("CSR", runInfo, ARRAY_LEN(runInfo), maxError);
+    saveRunInfo("CSR", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixCSR(*matrix), filename);
 }
 
 static void
@@ -2523,7 +2624,7 @@ createScenarioCSC(VKState *state, MatrixCSC *matrix, Vector vec)
 }
 
 static void
-runScenarioCSC(VKState *state, ScenarioCSC *scn, MatrixCSC *matrix, Vector expVec)
+runScenarioCSC(VKState *state, ScenarioCSC *scn, MatrixCSC *matrix, Vector expVec, char *filename)
 {
     u32 dispatchX = DIV_CEIL(matrix->N, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -2548,7 +2649,7 @@ runScenarioCSC(VKState *state, ScenarioCSC *scn, MatrixCSC *matrix, Vector expVe
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("CSC", runInfo, ARRAY_LEN(runInfo), maxError);
+    saveRunInfo("CSC", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixCSC(*matrix), filename);
 }
 
 static void
@@ -2683,7 +2784,7 @@ createScenarioBSR(VKState *state, MatrixBSR *matrix, Vector vec)
 }
 
 static void
-runScenarioBSR(VKState *state, ScenarioBSR *scn, MatrixBSR *matrix, Vector expVec)
+runScenarioBSR(VKState *state, ScenarioBSR *scn, MatrixBSR *matrix, Vector expVec, char *filename)
 {
     u32 dispatchX = DIV_CEIL(matrix->MB, WORKGROUP_SIZE);
     u32 dispatchY = 1;
@@ -2709,8 +2810,8 @@ runScenarioBSR(VKState *state, ScenarioBSR *scn, MatrixBSR *matrix, Vector expVe
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
     char *name = malloc(16);
-    sprintf(name, "BSR %d", matrix->blockSize);
-    saveRunInfo(name, runInfo, ARRAY_LEN(runInfo), maxError);
+    sprintf(name, "BSR%d", matrix->blockSize);
+    saveRunInfo(name, runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixBSR(*matrix), filename);
 }
 
 static void
@@ -2738,7 +2839,7 @@ destroyScenarioBSR(VKState *state, ScenarioBSR *scn)
 }
 
 static void
-runTestsForMatrix(VKState *state, const char *filename)
+runTestsForMatrix(VKState *state, char *filename)
 {
     printf("=== [%31s] ===\n", filename);
 
@@ -2755,47 +2856,47 @@ runTestsForMatrix(VKState *state, const char *filename)
     Vector expVec = MatrixELLMulVec(matELL, vec);
 
     ScenarioCOO scnCOO = createScenarioCOO(state, &matCOO, vec);
-    runScenarioCOO(state, &scnCOO, &matCOO, expVec);
+    runScenarioCOO(state, &scnCOO, &matCOO, expVec, filename);
     destroyScenarioCOO(state, &scnCOO);
 
     ScenarioELL scnELL = createScenarioELL(state, &matELL, vec);
-    runScenarioELL(state, &scnELL, &matELL, expVec);
+    runScenarioELL(state, &scnELL, &matELL, expVec, filename);
     destroyScenarioELL(state, &scnELL);
 
     ScenarioELLBufferOffset scnELLBufferOffset = createScenarioELLBufferOffset(state, &matELL, vec);
-    runScenarioELLBufferOffset(state, &scnELLBufferOffset, &matELL, expVec);
+    runScenarioELLBufferOffset(state, &scnELLBufferOffset, &matELL, expVec, filename);
     destroyScenarioELLBufferOffset(state, &scnELLBufferOffset);
 
     ScenarioELL2Buffer scnELL2Buffer = createScenarioELL2Buffer(state, &matELL, vec);
-    runScenarioELL2Buffer(state, &scnELL2Buffer, &matELL, expVec);
+    runScenarioELL2Buffer(state, &scnELL2Buffer, &matELL, expVec, filename);
     destroyScenarioELL2Buffer(state, &scnELL2Buffer);
 
     ScenarioSELL scnSELL = createScenarioSELL(state, &matSELL, vec);
-    runScenarioSELL(state, &scnSELL, &matSELL, expVec);
+    runScenarioSELL(state, &scnSELL, &matSELL, expVec, filename);
     destroyScenarioSELL(state, &scnSELL);
 
     ScenarioSELLOffsets scnSELLOffsets = createScenarioSELLOffsets(state, &matSELL, vec);
-    runScenarioSELLOffsets(state, &scnSELLOffsets, &matSELL, expVec);
+    runScenarioSELLOffsets(state, &scnSELLOffsets, &matSELL, expVec, filename);
     destroyScenarioSELLOffsets(state, &scnSELLOffsets);
 
     ScenarioCSR scnCSR = createScenarioCSR(state, &matCSR, vec);
-    runScenarioCSR(state, &scnCSR, &matCSR, expVec);
+    runScenarioCSR(state, &scnCSR, &matCSR, expVec, filename);
     destroyScenarioCSR(state, &scnCSR);
 
     ScenarioCSC scnCSC = createScenarioCSC(state, &matCSC, vec);
-    runScenarioCSC(state, &scnCSC, &matCSC, expVec);
+    runScenarioCSC(state, &scnCSC, &matCSC, expVec, filename);
     destroyScenarioCSC(state, &scnCSC);
 
     ScenarioBSR scnBSR_2 = createScenarioBSR(state, &matBSR_2, vec);
-    runScenarioBSR(state, &scnBSR_2, &matBSR_2, expVec);
+    runScenarioBSR(state, &scnBSR_2, &matBSR_2, expVec, filename);
     destroyScenarioBSR(state, &scnBSR_2);
 
     ScenarioBSR scnBSR_4 = createScenarioBSR(state, &matBSR_4, vec);
-    runScenarioBSR(state, &scnBSR_4, &matBSR_4, expVec);
+    runScenarioBSR(state, &scnBSR_4, &matBSR_4, expVec, filename);
     destroyScenarioBSR(state, &scnBSR_4);
 
     ScenarioBSR scnBSR_8 = createScenarioBSR(state, &matBSR_8, vec);
-    runScenarioBSR(state, &scnBSR_8, &matBSR_8, expVec);
+    runScenarioBSR(state, &scnBSR_8, &matBSR_8, expVec, filename);
     destroyScenarioBSR(state, &scnBSR_8);
 
     destroyMatrixCOO(matCOO);
