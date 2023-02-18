@@ -1,0 +1,32 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{c+cp}{\PYGZsh{}version 450}
+
+\PYG{c+cp}{\PYGZsh{}define WORKGROUP\PYGZus{}SIZE 32}
+\PYG{k}{layout} \PYG{p}{(}\PYG{n}{local\PYGZus{}size\PYGZus{}x} \PYG{o}{=} \PYG{n}{WORKGROUP\PYGZus{}SIZE}\PYG{p}{,} \PYG{n}{local\PYGZus{}size\PYGZus{}y} \PYG{o}{=} \PYG{l+m+mi}{1}\PYG{p}{)} \PYG{k}{in}\PYG{p}{;}
+
+\PYG{k}{layout}\PYG{p}{(}\PYG{n}{set} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{,} \PYG{n}{binding} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{)} \PYG{k}{buffer} \PYG{n}{bufA} \PYG{p}{\PYGZob{}}
+    \PYG{k+kt}{uint} \PYG{n}{elementNum}\PYG{p}{,} \PYG{n}{M}\PYG{p}{,} \PYG{n}{N}\PYG{p}{;}
+    \PYG{k+kt}{float} \PYG{n}{floatdata}\PYG{p}{[];}
+\PYG{p}{\PYGZcb{};}
+\PYG{k}{layout}\PYG{p}{(}\PYG{n}{set} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{,} \PYG{n}{binding} \PYG{o}{=} \PYG{l+m+mi}{1}\PYG{p}{)} \PYG{k}{buffer} \PYG{n}{bufAColumnIndex} \PYG{p}{\PYGZob{}} \PYG{k+kt}{uint} \PYG{n}{columnIndex}\PYG{p}{[];} \PYG{p}{\PYGZcb{};}
+\PYG{k}{layout}\PYG{p}{(}\PYG{n}{set} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{,} \PYG{n}{binding} \PYG{o}{=} \PYG{l+m+mi}{2}\PYG{p}{)} \PYG{k}{buffer} \PYG{n}{bufARowOffsets}  \PYG{p}{\PYGZob{}} \PYG{k+kt}{uint} \PYG{n}{rowOffsets}\PYG{p}{[];} \PYG{p}{\PYGZcb{};}
+\PYG{k}{layout}\PYG{p}{(}\PYG{n}{set} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{,} \PYG{n}{binding} \PYG{o}{=} \PYG{l+m+mi}{3}\PYG{p}{)} \PYG{k}{buffer} \PYG{n}{inputVector}     \PYG{p}{\PYGZob{}} \PYG{k+kt}{float} \PYG{n}{inVec}\PYG{p}{[];} \PYG{p}{\PYGZcb{};}
+\PYG{k}{layout}\PYG{p}{(}\PYG{n}{set} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{,} \PYG{n}{binding} \PYG{o}{=} \PYG{l+m+mi}{4}\PYG{p}{)} \PYG{k}{buffer} \PYG{n}{outputVector}    \PYG{p}{\PYGZob{}} \PYG{k+kt}{float} \PYG{n}{outVec}\PYG{p}{[];} \PYG{p}{\PYGZcb{};}
+
+\PYG{k+kt}{void} \PYG{n}{main}\PYG{p}{()}
+\PYG{p}{\PYGZob{}}
+    \PYG{k}{const} \PYG{k+kt}{uint} \PYG{n}{rowi} \PYG{o}{=} \PYG{n+nb}{gl\PYGZus{}GlobalInvocationID}\PYG{p}{.}\PYG{n}{x}\PYG{p}{;}
+    \PYG{k}{if}\PYG{p}{(}\PYG{n}{rowi} \PYG{o}{\PYGZlt{}} \PYG{n}{M}\PYG{p}{)} \PYG{p}{\PYGZob{}}
+        \PYG{k}{const} \PYG{k+kt}{uint} \PYG{n}{rowOffset} \PYG{o}{=} \PYG{n}{rowOffsets}\PYG{p}{[}\PYG{n}{rowi}\PYG{p}{];}
+        \PYG{k}{const} \PYG{k+kt}{uint} \PYG{n}{nzCount} \PYG{o}{=} \PYG{n}{rowOffsets}\PYG{p}{[}\PYG{n}{rowi}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{]} \PYG{o}{\PYGZhy{}} \PYG{n}{rowOffset}\PYG{p}{;}
+
+        \PYG{k+kt}{float} \PYG{n}{sum} \PYG{o}{=} \PYG{l+m+mf}{0.0}\PYG{p}{;}
+        \PYG{k}{for}\PYG{p}{(}\PYG{k+kt}{uint} \PYG{n}{coli} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{;} \PYG{n}{coli} \PYG{o}{\PYGZlt{}} \PYG{n}{nzCount}\PYG{p}{;} \PYG{n}{coli}\PYG{o}{++}\PYG{p}{)}
+        \PYG{p}{\PYGZob{}}
+            \PYG{k}{const} \PYG{k+kt}{uint} \PYG{n}{cellOffset} \PYG{o}{=} \PYG{n}{rowOffset} \PYG{o}{+} \PYG{n}{coli}\PYG{p}{;}
+            \PYG{n}{sum} \PYG{o}{+=} \PYG{n}{inVec}\PYG{p}{[}\PYG{n}{columnIndex}\PYG{p}{[}\PYG{n}{cellOffset}\PYG{p}{]]} \PYG{o}{*} \PYG{n}{floatdata}\PYG{p}{[}\PYG{n}{cellOffset}\PYG{p}{];}
+        \PYG{p}{\PYGZcb{}}
+        \PYG{n}{outVec}\PYG{p}{[}\PYG{n}{rowi}\PYG{p}{]} \PYG{o}{=} \PYG{n}{sum}\PYG{p}{;}
+    \PYG{p}{\PYGZcb{}}
+\PYG{p}{\PYGZcb{}}
+\end{Verbatim}

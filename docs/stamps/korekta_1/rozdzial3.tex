@@ -1,0 +1,101 @@
+\chapter{Mikro-architektura, interfejs Vulkan i shadery obliczeniowe}
+\label{cha:vulkan_micro_shaders}
+
+\section{Mikro-architektura nowoczesnych procesorów graficznych}
+\label{sec:micro}
+
+Podejście do architektury, którą mikroprocesory graficzne mają implementować i ulepszać z generacji na generację wyewoluowało z wyspecjalizowanego na generyczne.
+Początkowo ogólną ideą było stworzenie akceleratora posiadającego wyspecjalizowane jednostki, będące odpowiedzialne tylko za ściśle określone operacje.
+Jednostki podzielono na trzy poziomy, każdy kolejny poziom miał na celu realizację innej operacji: przetwarzanie wierzchołków geometrii, generowanie fragmentów i ich finalne połączenie.
+Próba odwzorowania teoretycznej abstrakcji grafiki trójwymiarowej w krzemie stworzyła skomplikowany i mało elastyczny mikro-procesor.
+Przykładowo, jeżeli dana aplikacja chce narysować mało wierzchołków, a jednocześnie wykonać skomplikowane operacje na wygenerowanych fragmentach, nie było możliwości wykorzystania krzemu przeznaczonego do przetwarzania geometrii do wykonywania obliczeń na wierzchołkach.
+Można podać odwrotny przykład, w którym aplikacja chce wykorzystać wiele wierzchołków natomiast mieć proste obliczenia na wynikowych fragmentach.
+Wszystko, co wybiegało poza przewidzianą przez twórców architektury normę nie wykorzystywało krzemu w całości mimo tego, że surowa moc obliczeniowa w teorii była dostępna.
+Twórcy architektury również mieli problemy z optymalnym rozłożeniem ilości krzemu przeznaczonego dla poszczególnych kroków procesu. 
+
+Rozwiązaniem było stworzenie ogólnej jednostki, będącej w stanie wykonywać zadane obliczenia bez przywiązania do jakiejkolwiek abstrakcyjnej wizji.
+
+Wraz z premierą architektury \textbf{\textit{Fermi TESLA}} w mikroprocesorach firmy \textit{NVIDIA}, wprowadzono pojęcie multi-procesora strumieniowego (ang. Streaming Multiprocesor), w skrócie \textit{SM}.
+Posiadał on 8 jednostek wykonawczych (ALU), obsługujących podstawowe operacje na 32-bitowych liczbach zmiennoprzecinkowych, 2 jednostki specjalnego przeznaczenia (SFU), pozwalające na obliczanie skomplikowanych funkcji, na przykład \textit{sin}, \textit{exp} \cite{TeslaNV}.
+Aby dostarczyć dane do rdzeni, \textit{SM} posiada pamięć podręczną instrukcji, pamięć współdzieloną pomiędzy jednostki wykonawcze, pamięć podręczną wartości stałych oraz kolejkę wątków do uruchomienia.
+Według taksonomii Flynna, architektura \textit{Tesla} zostałaby zaklasyfikowana w kontekście SIMD (Single Instruction Multiple Data) jako procesor tablicowy (ang. Array Processor)\cite{Flynn72}, w którym jedną instrukcję wykonuje wiele sterowalnych wątków.
+Obecnie tę klasyfikację opisuję się jako SIMT (Single Instruction Multiple Threads), nazwa ta została rozpowszechniona przez firmę NVIDIA.
+Zadania przypisywane są do kolejek wolnych \textit{SM} w grupach 32 wątków nazwanych \textit{warp}'ami.
+Opróżnienie kolejki zajmowało 4 cykle, jeżeli wszystkie instrukcje mogą zostać wykonane na rdzeniach \textit{ALU}.
+Dla operacji wymagających wykorzystania rdzeni \textit{SFU} wykonanie wszystkich przypisanych wątków trwa 16 cykli.
+
+Najmniejszy logiczny blok adresowalny wewnątrz mikroprocesora, jakim jest \textit{SM}, ma generyczną naturę, która sprawia, że w prosty sposób można zwiększyć moc obliczeniową mikro-procesora poprzez zwiększenie ich ilości znajdujących się w krzemie.
+Takie podejście pokrywało wszystkie możliwe przypadki, nieważne jak bardzo odbiegające od normy.
+Całość krzemu jest wykorzystywana, a to, jakie zadanie ma pełnić zostaje dynamicznie określone zależnie od typu pracy. 
+W porównaniu do rdzenia procesora centralnego celem nie jest zwiększenie wydajności jednego wątku.
+Zmniejsza to potrzebę implementowania części spekulacyjnej procesora oraz posiadania dużych pamięci podręcznych.
+Ideą jest jak największa surowa moc obliczeniowa pożądana w takich dziedzinach jak algebra liniowa, metody numeryczne czy grafika komputerowa.
+Odblokowanie takich możliwości umożliwiło tworzenie o wiele bardziej skomplikowanych symulacji i tchnęło nowe życie w pole sztucznej inteligencji.
+Kolejne mikro-architektury budowały na koncepcie \textit{SM}, zwiększając ich możliwości, moc oraz ilość dzięki postępom w litografii.
+
+\section{Interfejs Vulkan}
+\label{sec:vulkan_iface}
+
+Jednostka centralna komunikuje się z procesorem graficznym przy użyciu abstrakcyjnego interfejsu, który opisuje zestaw procedur oraz ich oczekiwany wynik działania.
+Sposób implementacji danego interfejsu zależy od sterownika graficznego.
+Idealny interfejs jest abstrakcyjny w takim stopniu, żeby pozwolić różnym producentom procesorów graficznych na elastyczne implementowanie procedur bez ścisłego powiązania z samą architekturą fizyczną.
+Dla użytkowników interfejs powinien dostarczać możliwie jak największej kontroli nad tym, co wykonuje procesor graficzny. 
+Przykładowo, jeden z pierwszych interfejsów, \textit{OpenGL} opierał się na wywoływaniu komend, które zmieniały globalną maszynę stanu, a ta następnie była interpretowana przez sterownik graficzny.
+Wysokopoziomowa abstrakcja miała na celu pozwolenie użytkownikowi na ignorowanie wielu operacji dziejących się bez jego wiedzy.
+Mimo licznych zalet, rozwiązanie takie miało również swoje wady.
+Osoby doświadczone nie miały możliwości niskopoziomowej kontroli, przez co pole optymalizacji było ograniczone.
+W samej specyfikacji istniały miejsca, w których wynik działania danej komendy był niedoprecyzowany.
+Finalne zachowanie było zależne od implementacji, przez co ten sam program wykonany na procesorach graficznych dwóch różnych producentów mógł wykazywać różne wyniki.
+
+Sfinalizowany w roku 2016 interfejs \textit{Vulkan} \cite{VulkanSpec} ma na celu zastąpienie interfejsu \textit{OpenGL}.
+Zbudowany został na podstawach interfejsu \textit{Mantle}, który został stworzony oraz następnie przekazany grupie \textit{Khronos} przez firmę \textit{AMD}.
+W przeciwieństwie do swojego poprzednika, niskopoziomowa abstrakcja umożliwia wykorzystanie procesora graficznego w bardziej generyczny sposób.
+Aby to zrobić, użytkownikowi zostaje dostarczony zestaw procedur operujących na przesłanym przez niego stanie w poszczególnych obiektach.
+Odstąpienie od globalnego stanu umożliwiło wielowątkowe sterowanie procesorem graficznym, co przekłada się na zwiększoną wydajność w przypadkach, gdy procesor jest wąskim gardłem w programie.
+Wydajność zostaje również poprawiona poprzez ominięcie sprawdzania błędów przez sterownik graficzny podczas pracy programu, jest to zadaniem użytkownika, aby dostarczyć do sterownika poprawne dane.
+Na użytkowniku ciąży wiele odpowiedzialności, zostaje mu powierzone zarządzanie pamięcią oraz synchronizacją procesora graficznego.
+Wszystko to celem maksymalnego wykorzystania procesora graficznego, aby osiągnąć jak najwyższą wydajność.
+Doświadczony programista jest w stanie zarządzać dostępnymi mu zasobami na wcześniej niespotykaną skalę dokładności.
+
+Posługiwanie się przez specyfikacje prostymi i kompatybilnymi z architekturą komputerów konceptami znacznie redukuje możliwość niesprecyzowania danego aspektu interfejsu.
+Twórcy sterowników graficznych mogą je znacznie uprościć tym samym redukując ilość błędów i poprawiając wydajność oraz zniesione zostaje rozgraniczenie pomiędzy interfejsem dla mobilnych i konwencjonalnych procesorów graficznych.
+Poprzednio dla systemów wbudowanych został stworzony interfejs \textit{OpenGL ES}, będący podzbiorem interfejsu \textit{OpenGL} dla komputerów stacjonarnych.
+Tworzy to sztuczny podział, w którym utrzymanie dwóch różnych systemów wymaga w najgorszym przypadku dwa razy więcej wysiłku.
+Podział ten nie istnieje dla \textit{Vulkan}, ponieważ od początku celem było zunifikowanie wszystkich urządzeń i zmniejszenie liczby interfejsów do jednego.
+Dzisiaj ten sam interfejs wspierany jest w komputerach stacjonarnych, urządzeniach mobilnych, systemach wbudowanych i konsolach.
+Narzędzia stworzone do pracy z aplikacjami wykorzystującymi \textit{Vulkan} mogą zostać wykorzystane we wszystkich typach urządzeń.
+
+Mimo, że grafika komputerowa była głównym wspieranym celem, podczas tworzeniu interfejsu przewidziano wykorzystanie procesora graficznego do innych zadań.
+Rozwijające się pole sztucznej inteligencji zaczęło polegać na mocy obliczeniowej procesorów graficznych do budowania coraz to większych modeli uzyskujących coraz to lepsze wyniki.
+\textit{Vulkan} przewiduje możliwość wykorzystania procesora graficznego do obliczeń naukowych, osiąga to poprzez tworzenie różnego typów potoków.
+Obok \textit{pipeline}'u graficznego istnieje \textit{pipeline} obliczeniowy, który pozwala na uruchomienie wybranych shaderów obliczeniowych.
+
+\section{Shadery obliczeniowe}
+\label{sec:shader_comp}
+
+Shader to ogólnie przyjęta nazwa na program stworzony przez użytkownika, który ostatecznie zostanie uruchomiony na procesorze graficznym.
+Shaderem obliczeniowym jest program wielowątkowy, działający w modelu SIMT dokonujący arbitralnych obliczeń.
+Jednostka centralna żąda wywołania pewnej ilości grup shaderów, a ich ilość jest określona jako trójwymiarowa przestrzeń $X \times Y \times Z$.
+Ułatwia to wykonywanie obliczeń na problemach z natury wielowymiarowych.
+Przykładowo, ustawiając wymiar $Z = 1$ zostanie uruchomiona dwuwymiarowa grupa, którą można wykorzystać przy algorytmach działających na obrazach lub automatach komórkowych.
+Łączna liczba $n_{SC}$ wszystkich uruchomionych shaderów obliczeniowych w danej inwokacji może zostać określona jako iloczyn wszystkich wymiarów $n_{SC} = XYZ$.
+Należy jednak rozgraniczyć grupę i pojedyncze wywołanie shadera.
+Ilość wywołań shaderów w pojedynczej grupie jest definiowane przez sam shader jako lokalny rozmiar shadera.
+
+Wszystkie wartości wejściowe i wyjściowe shadera są zdefiniowane przez użytkownika.
+Shadery mają dostęp do swojego identyfikatora grupy oraz lokalnego identyfikatora wewnątrz tej grupy.
+Wywołania shader'a z tej samej grupy współdzielą identyfikator grupy, natomiast każdy z nich dostanie unikatowy lokalny identyfikator.
+Na podstawie tych identyfikatorów shader może określić, na jakich danych ma operować.
+Dane do i z shaderów są przenoszone poprzez sampler tekstur lub Shader Storage Blocks (\textit{SSBO}).
+\textit{SSBO} są buforami przechowującymi dane w sekwencyjny sposób, których rozmiar może być dynamiczny, mają one niespójny model pamięci, to znaczy, że dane zapisane przez jeden wątek nie muszą być od razu widoczne przez drugi wątek.
+To samo zachodzi z zapisem, nie ma gwarancji, że dane zapisane przez jeden wątek nie zostaną nadpisane przez inny wątek przed trafieniem do pamięci głównej.  
+Aby rozwiązać sytuację, w której więcej niż jeden wątek musi zapisać dane do tej samej komórki pamięci \textit{SSBO} wspierają atomowe (niepodzielne) operacje na pamięci.
+
+\textit{Vulkan} oczekuje, że wszystkie shadery będą przekazane do niego w formacie \textit{SPIR-V}\cite{SPIRVSpec}, jest to język pośredni przechowywany w formacie binarnym, stworzony na potrzeby obliczeń wielowątkowych i graficznych.
+Użycie języka pośredniego pozwala na tworzenie shaderów w różnych językach programowania, które należy jedynie sprowadzić do formy zgodnej ze specyfikacją \textit{SPIR-V}.
+Językiem najczęściej wykorzystywanym jako wysokopoziomowa abstrakcja jest \textit{GLSL} używany wcześniej w \textit{OpenGL}.
+Wykorzystanie formatu binarnego w przeciwieństwie do \textit{OpenGL}, gdzie cały kod \textit{GLSL} był przechowany jako ciąg czytelnych znaków, posiada wiele zalet.
+Największą z nich jest uproszczenie sterownika graficznego, który nie musi implementować całego kompilatora języka o podobnym stopniu skomplikowania, co język C.
+Konwersja odbywająca się w sterowniku jest prostsza i o wiele bardziej wydajna, ponieważ zbędna praca została wykonana wcześniej podczas konwersji na format \textit{SPIR-V}.
+Zmniejsza to czas potrzebny na przygotowanie \textit{pipeline}'u, przez co aplikacje mają większą swobodę w wykorzystywaniu większej ilości shaderów.
+Format binarny zajmuje również mniej miejsca na dysku oraz utrudnia inżynierię wsteczną własnościowych shaderów w publicznych aplikacjach.

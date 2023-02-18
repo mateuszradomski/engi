@@ -68,6 +68,15 @@ typedef struct MatrixSELL
     u32 *rowOffsets;    // tablica pierwszego indeksu elementu w pasku
 } MatrixSELL;
 
+typedef struct MatrixSELLColumnMajor
+{
+    u32 M, N, C;        // wymiar M x N i wysokość paska
+    u32 elementNum;     // ilość elementów niezerowych
+    float *floatdata;   // tablica wartości elementów
+    u32 *columnIndices; // tablica kolumn elementów
+    u32 *rowOffsets;    // tablica pierwszego indeksu elementu w pasku
+} MatrixSELLColumnMajor;
+
 typedef struct MatrixCSR
 {
     u32 M, N, elementNum; // wymiar M x N i ilość elementów niezerowych
@@ -98,6 +107,7 @@ typedef struct MatrixBSR
     float *floatdata;   // tablica wartości elementów
     u32 *rowOffsets;    // tablica pierwszego indeksu elementu w rzędzie
     u32 *columnIndices; // tablica kolumn elementów
+    u32 elementNum;
 } MatrixBSR;
 
 typedef struct VKDeviceAndComputeQueue
@@ -233,6 +243,28 @@ typedef struct ScenarioSELL
     VkCommandBuffer commandBuffer;
 } ScenarioSELL;
 
+typedef struct ScenarioSELLColumnMajor
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet descriptorSet;
+
+    VKBufferAndMemory matHeaderAndColIndexHost;
+    VKBufferAndMemory matRowOffsetsHost;
+    VKBufferAndMemory matFloatHost;
+    VKBufferAndMemory inVecHost;
+    VKBufferAndMemory outVecHost;
+
+    VKBufferAndMemory matHeaderAndColIndexDevice;
+    VKBufferAndMemory matRowOffsetsDevice;
+    VKBufferAndMemory matFloatDevice;
+    VKBufferAndMemory inVecDevice;
+    VKBufferAndMemory outVecDevice;
+
+    VKPipelineDefinition pipelineDefinition;
+    VkCommandBuffer commandBuffer;
+} ScenarioSELLColumnMajor;
+
 typedef struct ScenarioSELLOffsets
 {
     VkDescriptorSetLayout descriptorSetLayout;
@@ -363,8 +395,6 @@ typedef struct RunInfoSummary
     double gflopAvg;
     double gflopSD;
     double maxError;
-    double padding1;
-    double padding2;
 } RunInfoSummary;
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))

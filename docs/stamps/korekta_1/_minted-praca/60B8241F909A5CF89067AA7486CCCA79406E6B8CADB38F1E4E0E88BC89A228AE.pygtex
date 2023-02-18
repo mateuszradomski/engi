@@ -1,0 +1,28 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{c+cp}{\PYGZsh{}version 450}
+\PYG{c+cp}{\PYGZsh{}extension GL\PYGZus{}EXT\PYGZus{}shader\PYGZus{}atomic\PYGZus{}float: enable}
+
+\PYG{c+cp}{\PYGZsh{}define WORKGROUP\PYGZus{}SIZE 32}
+\PYG{k}{layout} \PYG{p}{(}\PYG{n}{local\PYGZus{}size\PYGZus{}x} \PYG{o}{=} \PYG{n}{WORKGROUP\PYGZus{}SIZE}\PYG{p}{,} \PYG{n}{local\PYGZus{}size\PYGZus{}y} \PYG{o}{=} \PYG{l+m+mi}{1}\PYG{p}{)} \PYG{k}{in}\PYG{p}{;}
+
+\PYG{k}{layout}\PYG{p}{(}\PYG{n}{set} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{,} \PYG{n}{binding} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{)} \PYG{k}{buffer} \PYG{n}{bufA} \PYG{p}{\PYGZob{}}
+    \PYG{k+kt}{uint} \PYG{n}{elementNum}\PYG{p}{,} \PYG{n}{M}\PYG{p}{,} \PYG{n}{N}\PYG{p}{;}
+    \PYG{k+kt}{float} \PYG{n}{data}\PYG{p}{[];}
+\PYG{p}{\PYGZcb{};}
+\PYG{k}{layout}\PYG{p}{(}\PYG{n}{set} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{,} \PYG{n}{binding} \PYG{o}{=} \PYG{l+m+mi}{1}\PYG{p}{)} \PYG{k}{buffer} \PYG{n}{bufARow}   \PYG{p}{\PYGZob{}} \PYG{k+kt}{uint} \PYG{n}{rows}\PYG{p}{[];} \PYG{p}{\PYGZcb{};}
+\PYG{k}{layout}\PYG{p}{(}\PYG{n}{set} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{,} \PYG{n}{binding} \PYG{o}{=} \PYG{l+m+mi}{2}\PYG{p}{)} \PYG{k}{buffer} \PYG{n}{bufACol}   \PYG{p}{\PYGZob{}} \PYG{k+kt}{uint} \PYG{n}{cols}\PYG{p}{[];} \PYG{p}{\PYGZcb{};}
+\PYG{k}{layout}\PYG{p}{(}\PYG{n}{set} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{,} \PYG{n}{binding} \PYG{o}{=} \PYG{l+m+mi}{3}\PYG{p}{)} \PYG{k}{buffer} \PYG{n}{bufInVec}  \PYG{p}{\PYGZob{}} \PYG{k+kt}{float} \PYG{n}{inVec}\PYG{p}{[];} \PYG{p}{\PYGZcb{};}
+\PYG{k}{layout}\PYG{p}{(}\PYG{n}{set} \PYG{o}{=} \PYG{l+m+mo}{0}\PYG{p}{,} \PYG{n}{binding} \PYG{o}{=} \PYG{l+m+mi}{4}\PYG{p}{)} \PYG{k}{buffer} \PYG{n}{bufOutVec} \PYG{p}{\PYGZob{}} \PYG{k+kt}{float} \PYG{n}{outVec}\PYG{p}{[];} \PYG{p}{\PYGZcb{};}
+
+\PYG{k+kt}{void} \PYG{n}{main}\PYG{p}{()} \PYG{p}{\PYGZob{}}
+    \PYG{k}{const} \PYG{k+kt}{uint} \PYG{n}{i} \PYG{o}{=} \PYG{n+nb}{gl\PYGZus{}GlobalInvocationID}\PYG{p}{.}\PYG{n}{x}\PYG{p}{;}
+
+    \PYG{k}{if}\PYG{p}{(}\PYG{n}{i} \PYG{o}{\PYGZlt{}} \PYG{n}{elementNum}\PYG{p}{)} \PYG{p}{\PYGZob{}}
+        \PYG{k}{const} \PYG{k+kt}{uint} \PYG{n}{row} \PYG{o}{=} \PYG{n}{rows}\PYG{p}{[}\PYG{n}{i}\PYG{p}{];}
+        \PYG{k}{const} \PYG{k+kt}{uint} \PYG{n}{col} \PYG{o}{=} \PYG{n}{cols}\PYG{p}{[}\PYG{n}{i}\PYG{p}{];}
+
+        \PYG{k+kt}{float} \PYG{n}{prod} \PYG{o}{=} \PYG{n}{data}\PYG{p}{[}\PYG{n}{i}\PYG{p}{]} \PYG{o}{*} \PYG{n}{inVec}\PYG{p}{[}\PYG{n}{col}\PYG{p}{];}
+        \PYG{n}{atomicAdd}\PYG{p}{(}\PYG{n}{outVec}\PYG{p}{[}\PYG{n}{row}\PYG{p}{],} \PYG{n}{prod}\PYG{p}{);}
+    \PYG{p}{\PYGZcb{}}
+\PYG{p}{\PYGZcb{}}
+\end{Verbatim}

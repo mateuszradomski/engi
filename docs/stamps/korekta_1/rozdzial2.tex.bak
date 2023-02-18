@@ -1,0 +1,328 @@
+\chapter{Mnożenie macierz-wektor dla macierzy rzadkich}
+\label{cha:macierzwektor}
+
+\section{Problem mnożenia macierzy \emph{poprzez - standardowo jednak ''przez'', nie powtarzam tej uwagi dalej} wektor}
+\label{sec:mnozeniemacierzwektor}
+
+Operacja taka jest specjalnym przypadkiem mnożenia macierzy przez macierz, gdy liczba kolumn w drugiej macierzy równa jest jeden.
+Macierz o liczbie rzędów $M$ i liczbie kolumn $N$ zostaje pomnożona przez wektor o liczbie rzędów równej ilości kolumn macierzy.
+Dla macierzy $A$ o wymiarach $M \times N$ i wektora $X$ o wymiarach $N \times 1$ możemy następująco przedstawić operację mnożenia $Y = AX$.
+Wynikowy wektor $Y$ będzie posiadał liczbę rzędów równą liczbie rzędów macierzy wejściowej, wymiary wektora to finalnie $M \times 1$.
+
+\section{Macierze rzadkie}
+\label{sec:macierzerzadkie}
+
+Macierz rzadka jest specjalnym przypadkiem macierzy, w której większość jej elementów jest równa zero.
+Możemy zaobserwować, że dla elementów zerowych mnożenie zawsze będzie skutkować wynikiem równym zero.
+Poświęcanie czasu obliczeniowego do ewaluacji iloczynu tych elementów jest zbędne.
+Ilość pamięci jaka wymagana jest do przetrzymania macierzy rośnie kwadratowo wraz ze wzrostem jej wymiaru.
+Jeżeli przyjmiemy, że tylko $n_z$ elementów w macierzy jest niezerowych teoretycznie możliwe jest następujące zmniejszenie zużycia pamięci i przyśpiesznie obliczeń:
+
+\begin{equation}
+    R = \frac{M N}{n_z}
+\end{equation}
+
+\begin{eqwhere}[2cm]
+	\item[$R$] krotność zmniejszenia zużycia pamięci oraz krotność przyśpieszenia obliczeń
+	\item[$n_z$] ilość elementów niezerowych w macierzy
+    \item[$M$] liczba rzędów macierzy
+    \item[$N$] liczba kolumn macierzy
+\end{eqwhere}
+
+\section{Problem mnożenia macierzy rzadkiej poprzez wektor}
+\label{sec:macierzrzadkawektor}
+
+Istnieje pole problemów, których rozwiązanie zawsze wymaga pracy z macierzami rzadkimi.
+Przykładem jest metoda elementów skończonych (MES), w której ostateczne określenie wartości w węzłach jest rozwiązaniem układu równań, w którym macierz jest rzadka.
+Obliczenia na większych macierzach zazwyczaj dokonywane są poprzez metody iteracyjne.
+Podstawową operacją w tych metodach jest mnożenie macierzy rzadkiej przez wektor wiele razy, aby otrzymać jak najlepsze przybliżenie.
+
+\section{Formaty macierzy rzadkich}
+\label{sec:formatymacierzy}
+
+Problem główny w przechowywaniu macierzy rzadkich to sposób w jaki określony zostaje rząd oraz kolumna dla danego elementu.
+Samo przechowywanie tylko elementów niezerowych jest elementem wspólnym prawie wszystkich formatów.
+Występują formaty, które przetrzymują jednak część elementów zerowych, aby uprościć oszacowanie rzędu i kolumny.
+Zmniejsza to narzut pamięciowy przetrzymywania danych dodatkowych przy tablicy elementów niezerowych.
+
+Formaty omówione to:
+
+\begin{itemize}
+    \item COO (ang. Coordinate Format) - najprostszy format, który wykorzystuje trzy tablice \textit{row}, \textit{col}, \textit{floatdata}.
+    Odpowiednio przechowują one rząd, kolumnę i wartość elementu \textit{i}'tego.
+    Długość tablic równa jest ilości elementów niezerowych.
+
+    Reprezentacja wizualna transformacji przykładowej macierzy:
+    \[
+\left[
+\begin{array}{ccccc}
+    1 & 4 & 0 & 0 & 0\\ 
+    0 & 2 & 3 & 0 & 0\\ 
+    5 & 0 & 0 & 7 & 8\\ 
+    0 & 6 & 0 & 8 & 0\\ 
+\end{array}
+\right]
+\rightarrow
+\begin{matrix}
+\text{floatdata} & = & \begin{bmatrix}
+1 & 4 & 2 & 3 & 5 & 7 & 8 & 6 & 8 \\
+\end{bmatrix} \\
+\text{row} & = & \begin{bmatrix}
+0 & 0 & 1 & 1 & 2 & 2 & 2 & 3 & 3 \\
+\end{bmatrix} \\
+\text{col} & = & \begin{bmatrix}
+0 & 1 & 1 & 2 & 0 & 3 & 4 & 1 & 3 \\
+\end{bmatrix} \\
+\end{matrix}
+\]
+    
+    \item CSR (ang. Compressed Sparse Row Format) - format rzędowo kompresuje macierz poprzez zapisywanie wszystkich wartości z danego rzędu bezpośrednio po sobie.
+    Takie podejście umożliwia nieprzechowywanie rzędu elementu wprost, a jedynie indeks początkowego elementu wiersza.
+    Dwie tablice \textit{floatdata} i \textit{columnIndices} są nadal długości równej ilości elementów niezerowych i przechowują one odpowiednio wartość i kolumnę elementu \textit{i}'tego.
+    Trzecia tablica \textit{rowOffsets} ma długość o jeden większą niż ilość rzędów macierzy, co dla macierzy o większych zagęszczeniach pozwala zaoszczędzić na pamięci w porównaniu do formatu COO.
+    Dla numeru rzędu $r$ będącego wartością z przedziału $[0, N-1]$ przechowuje ona indeks pierwszego elementu w tablicach \textit{floatdata} i \textit{columnIndices} należącego do tego rzędu.
+    Liczbę elementów niezerowych w danym wierszu można obliczyć jako różnicę pomiędzy indeksem w wierszu $r+1$ a indeksem w wierszu $r$.
+
+    Reprezentacja wizualna transformacji przykładowej macierzy:
+    \[
+\left[
+\begin{array}{ccccc}
+    1 & 4 & 0 & 0 & 0\\ 
+    0 & 2 & 3 & 0 & 0\\ 
+    5 & 0 & 0 & 7 & 8\\ 
+    0 & 6 & 0 & 8 & 0\\ 
+\end{array}
+\right]
+\rightarrow
+\begin{matrix}
+\text{floatdata} & = & \begin{bmatrix}
+1 & 4 & 2 & 3 & 5 & 7 & 8 & 6 & 8 \\
+\end{bmatrix} \\
+\text{columnIndices} & = & \begin{bmatrix}
+0 & 1 & 1 & 2 & 0 & 3 & 4 & 1 & 3 \\
+\end{bmatrix} \\
+\text{rowOffsets} & = & \begin{bmatrix}
+0 & 2 & 4 & 7 & 9 \\
+\end{bmatrix} \\
+\end{matrix}
+\]
+
+    \item CSC (ang. Compressed Sparse Column Format) - format kolumnowo kompresuje macierz w identyczny sposób jak format CSR ze zmianą kierunku kompresji.
+    Niezmiennie macierz w tablicy \textit{floatdata} przechowuje wartość elementu \textit{i}'tego.
+    Format ten zapisuje w pełni rząd elementu \textit{i'tego} w tablicy \textit{rowIndex} o długości równej ilości elementów niezerowych.
+    Nieprzechowywane natomiast są kolumny zastąpione poprzez indeks początkowego elementu kolumny.
+    Zadanie to pełni tablica \textit{columnOffsets} o długości o jeden większej niż ilość kolumn w macierzy.
+    Jeżeli liczba rzędów jest równa liczbie kolumn macierzy format ten będzie wymagał tej samej ilości pamięci, co format CSR.
+   \emph{ Najczęściej preferowanym formatem jest CSR ze względu na ogólną architekturę wszystkich mikroprocesorów. - wiele zależy od algorytmu - dla mnożenia macierz-wektor rzeczywiście często preferowany jest CSR, choć są złożone formaty, gdzie występuje przechowywanie kolumnami}
+    
+    Reprezentacja wizualna transformacji przykładowej macierzy:
+    \[
+\left[
+\begin{array}{ccccc}
+    1 & 4 & 0 & 0 & 0\\ 
+    0 & 2 & 3 & 0 & 0\\ 
+    5 & 0 & 0 & 7 & 8\\ 
+    0 & 6 & 0 & 8 & 0\\ 
+\end{array}
+\right]
+\rightarrow
+\begin{matrix}
+\text{floatdata} & = & \begin{bmatrix}
+1 & 5 & 4 & 2 & 6 & 3 & 7 & 8 & 8 \\
+\end{bmatrix} \\
+\text{rowIndices} & = & \begin{bmatrix}
+0 & 2 & 0 & 1 & 3 & 1 & 2 & 3 & 2 \\
+\end{bmatrix} \\
+\text{columnOffsets} & = & \begin{bmatrix}
+0 & 2 & 5 & 6 & 8 & 9 \\
+\end{bmatrix} \\
+\end{matrix}
+\]
+    
+    \item ELL (ang. ELLPACK Format) - format przechowuje podmacierz o wymiarach $M \times P$ gdzie $P$ jest maksymalną ilością elementów niezerowych ze wszystkich wierszy. 
+    Jest to pierwszy format, który wybiera przechowywanie większej ilości danych niż ilość elementów niezerowych.
+    Jego wydajność wzrasta dla macierzy, w których średnia ilość elementów niezerowych w wierszu jest najbardziej zbliżona do $P$.
+    Wykorzystuje dwie tablice, \textit{floatdata} i \textit{columnIndices} obie o wymiarach $M \times K$.
+    Przechowują one kolejno wartości elementów i indeks kolumny, w której znajduje się ten element.
+    Lokalizacja wartości należących do danego rzędu jest prosta, ze względu na stałą $P$.
+    Zaczynając od indeksu $rP$ następne $P$ elementów należy do wiersza o indeksie $r$.
+    Jeżeli wiersz posiada mniej elementów niezerowych niż $P$ pola niewypełnione wartością lub kolumną są ustawione na specjalną wartość traktowaną jako flaga.
+    
+    Reprezentacja wizualna transformacji przykładowej macierzy:
+    \[
+\left[
+\begin{array}{ccccc}
+    1 & 4 & 0 & 0 & 0\\ 
+    0 & 2 & 3 & 0 & 0\\ 
+    5 & 0 & 0 & 7 & 8\\ 
+    0 & 6 & 0 & 8 & 0\\ 
+\end{array}
+\right]
+\rightarrow
+\begin{matrix}
+\text{floatdata} & = & \begin{bmatrix}
+1 & 4 & X \\
+2 & 3 & X \\
+5 & 7 & 8 \\
+6 & 8 & X \\
+\end{bmatrix} \\
+\end{matrix}
+\quad
+\begin{matrix}
+\text{columnIndices} & = & \begin{bmatrix}
+0 & 1 & X \\
+1 & 2 & X \\
+0 & 3 & 4 \\
+1 & 3 & X \\
+\end{bmatrix} \\
+\end{matrix}
+\]
+    
+    \item SELL (ang. Sliced ELLPACK Format) - jest modyfikacją formatu ELL, w której wartość $P$ jest obliczana w obrębie paska wierszy o wysokości $C$.
+    Umożliwia to ograniczenie efektu, w którym wiersz z dużą ilością elementów sztucznie zwiększa ilość potrzebnej pamięci.
+    Takie sporadyczne wiersze będą jedynie \emph{afektować - wpływać na } rozmiar swojego paska.
+    Najczęściej jednak wartość $P$ pasków będzie zbliżona do wartości średniej ilości elementów niezerowych we wszystkich wierszach.
+    Format wymaga dodatkowej tablicy \textit{rowOffsets} o długości równej ilości pasków, ta może zostać obliczona jako $\frac{M}{C}$ zaokrąglajac w górę.
+    Tak samo jak w formacie CSR przetrzymuje ona indeks pierwszego elementu w dwóch następnych tablicach odpowiadający \textit{i}'temu paskowi.
+    Tablice te to \textit{floatdata} i \textit{columnIndices}, pełniące tę samą role, co tablice o tej samej nazwie w formacie ELL.
+    Poprzez sterowanie wartością $C$ zmieniamy zachowanie formatu.
+    W przypadku, gdy $C = M$ mamy tylko jeden pasek, zatem format upraszcza się do ELL.
+    Natomiast dla $C = 1$, format zachowuje się identycznie jak CSR.
+    
+    Reprezentacja wizualna transformacji przykładowej macierzy dla wysokości paska $C = 2$:
+    \[
+\left[
+\begin{array}{ccccc}
+    1 & 4 & 0 & 0 & 0\\ 
+    0 & 2 & 3 & 0 & 0\\ 
+    5 & 0 & 0 & 7 & 8\\ 
+    0 & 6 & 0 & 8 & 0\\ 
+\end{array}
+\right]
+\rightarrow
+\begin{matrix}
+\begin{matrix}
+\text{floatdata} & = & \begin{bmatrix}
+1 & 4 &   \\
+2 & 3 &   \\
+\hline
+5 & 7 & 8 \\
+6 & 8 & X \\
+\end{bmatrix} \\
+\end{matrix}
+\quad
+\begin{matrix}
+\text{columnIndices} & = & \begin{bmatrix}
+0 & 1 &   \\
+1 & 2 &   \\
+\hline
+0 & 3 & 4 \\
+1 & 3 & X \\
+\end{bmatrix} \\
+\end{matrix}
+
+\\
+\begin{matrix}
+\text{rowOffsets} & = & \begin{bmatrix}
+0 & 4 & 10 \\
+\end{bmatrix} \\
+\end{matrix}
+\end{matrix}
+\]
+    
+    \item BSR (ang. Block Compressed Sparse Row Format) - format dzielący i przechowujący macierz jako zbiór bloków o wymiarach $B_s \times B_s$.
+    W specjalnym przypadku, gdy $B_s = 1$ format zachowuje się identycznie jak CSR.
+    Dla wartości większych macierz zostaje skompresowana rzędowo przy założeniu, że najmniejszą komórką jest blok $B_s \times B_s$.
+    W tablicy \textit{floatdata} przechowywane są dane bloków następująco po sobie, długość tej tablicy równa jest liczbie niezerowych bloków pomnożona przez $B_s ^ 2$.
+    Kolumnę bloku określa tablica \textit{columnIndices} o długości równej liczbie niezerowych bloków.
+    Określenie kolumny w przestrzeni macierzy dla elementu w bloku odbywa się poprzez pomnożenie kolumny bloku przez $B_s$ oraz dodanie kolumny elementu wewnątrz bloku.
+    Pierwszy blok należący do rzędu bloku o indeksie $r_b$ znajduje się pod indeksem wskazanym przez wartość w tablicy \textit{rowOffsets} pod indeksem $r_b$.
+    Tablica ta ma długość równą $\frac{M}{B_s} + 1$.
+    Obliczenie rzędu w przestrzeni macierzy dla elementu odbywa się podobnie jak dla kolumny, do iloczynu $r_b$ i $B_s$ zostaje dodany rząd elementu wewnątrz bloku. 
+    Dla macierzy o wymiarach nie będących wielokrotnością $B_s$ wartości elementów wykraczające poza wymiar macierzy $A$ zostają ustawione na wartość zerową.
+
+    Reprezentacja wizualna transformacji przykładowej macierzy dla $B_s = 2$:
+    \[
+\left[
+\begin{array}{cccccc}
+    1 & 4 & 0 & 0 & 0\\ 
+    0 & 2 & 3 & 0 & 0\\ 
+    5 & 0 & 0 & 7 & 8\\ 
+    0 & 6 & 0 & 8 & 0\\ 
+\end{array}
+\right]
+\rightarrow
+\left[
+\begin{array}{cccccc}
+    1 & 4 & 0 & 0 & 0 & 0 \\ 
+    0 & 2 & 3 & 0 & 0 & 0 \\ 
+    5 & 0 & 0 & 7 & 8 & 0 \\ 
+    0 & 6 & 0 & 8 & 0 & 0 \\ 
+\end{array}
+\right]
+\rightarrow
+\left[
+\begin{array}{cc|cc|cc}
+    1 & 4 & 0 & 0 & 0 & 0 \\ 
+    0 & 2 & 3 & 0 & 0 & 0 \\ 
+    \hline
+    5 & 0 & 0 & 7 & 8 & 0 \\ 
+    0 & 6 & 0 & 8 & 0 & 0 \\ 
+\end{array}
+\right]
+\]
+
+\[
+A_{b} = \begin{bmatrix}
+A_{00} & A_{01} & A_{02} \\
+A_{10} & A_{11} & A_{12} \\
+\end{bmatrix}
+\rightarrow
+\begin{matrix}
+
+\begin{matrix}
+A_{00} = \begin{bmatrix}
+1 & 4 \\
+0 & 2 \\
+\end{bmatrix},
+A_{01} = \begin{bmatrix}
+0 & 0 \\
+3 & 0 \\
+\end{bmatrix},
+\end{matrix}
+
+\\
+
+\begin{matrix}
+A_{10} = \begin{bmatrix}
+5 & 0 \\
+0 & 6 \\
+\end{bmatrix},
+A_{11} = \begin{bmatrix}
+0 & 7 \\
+0 & 8 \\
+\end{bmatrix},
+A_{12} = \begin{bmatrix}
+8 & 0 \\
+0 & 0 \\
+\end{bmatrix}
+\end{matrix}
+
+\end{matrix}
+\]
+
+\[
+\begin{matrix}
+\text{floatdata} & = & \begin{bmatrix}
+A_{00} & A_{01} & A_{10} & A_{11} & A_{12} \\
+\end{bmatrix} \\
+\text{columnIndices} & = & \begin{bmatrix}
+0 & 1 & 0 & 1 & 2 \\
+\end{bmatrix} \\
+\text{rowOffsets} & = & \begin{bmatrix}
+0 & 2 & 5 \\
+\end{bmatrix} \\
+\end{matrix}
+\]
+    
+\end{itemize}

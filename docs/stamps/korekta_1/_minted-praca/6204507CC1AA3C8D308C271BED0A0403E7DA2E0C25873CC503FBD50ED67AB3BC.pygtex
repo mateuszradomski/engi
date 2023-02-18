@@ -1,0 +1,9 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k}{typedef} \PYG{k}{struct} \PYG{n}{MatrixCSC}
+\PYG{p}{\PYGZob{}}
+    \PYG{n}{u32} \PYG{n}{M}\PYG{p}{,} \PYG{n}{N}\PYG{p}{,} \PYG{n}{elementNum}\PYG{p}{;} \PYG{c+c1}{// wymiar M x N i ilość elementów niezerowych}
+    \PYG{k+kt}{float} \PYG{o}{*}\PYG{n}{floatdata}\PYG{p}{;}     \PYG{c+c1}{// tablica wartości elementów}
+    \PYG{n}{u32} \PYG{o}{*}\PYG{n}{rowIndices}\PYG{p}{;}      \PYG{c+c1}{// tablica rzędów elementów}
+    \PYG{n}{u32} \PYG{o}{*}\PYG{n}{columnOffsets}\PYG{p}{;}   \PYG{c+c1}{// tablica pierwszego indeksu elementu w kolumnie}
+\PYG{p}{\PYGZcb{}} \PYG{n}{MatrixCSC}\PYG{p}{;}
+\end{Verbatim}

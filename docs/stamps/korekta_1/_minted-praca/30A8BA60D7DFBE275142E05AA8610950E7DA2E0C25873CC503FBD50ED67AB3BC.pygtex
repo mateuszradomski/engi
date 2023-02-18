@@ -1,0 +1,47 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{n}{MatrixCSC} \PYG{n+nf}{ELLToMatrixCSC}\PYG{p}{(}\PYG{n}{MatrixELL} \PYG{n}{matrix}\PYG{p}{)} \PYG{p}{\PYGZob{}}
+    \PYG{n}{MatrixCSC} \PYG{n}{result} \PYG{o}{=} \PYG{p}{\PYGZob{}} \PYG{l+m+mi}{0} \PYG{p}{\PYGZcb{};}
+
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{M} \PYG{o}{=} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{M}\PYG{p}{;}
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{N} \PYG{o}{=} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{N}\PYG{p}{;}
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{elementNum} \PYG{o}{=} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{elementNum}\PYG{p}{;}
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{floatdata}        \PYG{o}{=} \PYG{n}{malloc}\PYG{p}{(}\PYG{n}{result}\PYG{p}{.}\PYG{n}{elementNum} \PYG{o}{*} \PYG{k}{sizeof}\PYG{p}{(}\PYG{n}{result}\PYG{p}{.}\PYG{n}{floatdata}\PYG{p}{[}\PYG{l+m+mi}{0}\PYG{p}{]));}
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{rowIndices}       \PYG{o}{=} \PYG{n}{malloc}\PYG{p}{(}\PYG{n}{result}\PYG{p}{.}\PYG{n}{elementNum} \PYG{o}{*} \PYG{k}{sizeof}\PYG{p}{(}\PYG{k+kt}{uint32\PYGZus{}t}\PYG{p}{));}
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{columnOffsets}    \PYG{o}{=} \PYG{n}{malloc}\PYG{p}{((}\PYG{n}{result}\PYG{p}{.}\PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{)} \PYG{o}{*} \PYG{k}{sizeof}\PYG{p}{(}\PYG{k+kt}{uint32\PYGZus{}t}\PYG{p}{));}
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{columnOffsets}\PYG{p}{[}\PYG{l+m+mi}{0}\PYG{p}{]} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{p}{;}
+
+    \PYG{k+kt}{uint32\PYGZus{}t} \PYG{o}{*}\PYG{n}{rowIndices} \PYG{o}{=} \PYG{n}{malloc}\PYG{p}{(}\PYG{n}{matrix}\PYG{p}{.}\PYG{n}{N} \PYG{o}{*} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{P} \PYG{o}{*} \PYG{k}{sizeof}\PYG{p}{(}\PYG{k+kt}{uint32\PYGZus{}t}\PYG{p}{));}
+    \PYG{k+kt}{uint32\PYGZus{}t} \PYG{o}{*}\PYG{n}{colFront} \PYG{o}{=} \PYG{n}{calloc}\PYG{p}{(}\PYG{l+m+mi}{1}\PYG{p}{,} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{N} \PYG{o}{*} \PYG{k}{sizeof}\PYG{p}{(}\PYG{k+kt}{uint32\PYGZus{}t}\PYG{p}{));}
+    \PYG{n}{memset}\PYG{p}{(}\PYG{n}{rowIndices}\PYG{p}{,} \PYG{n}{INVALID\PYGZus{}COLUMN}\PYG{p}{,} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{N} \PYG{o}{*} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{P} \PYG{o}{*} \PYG{k}{sizeof}\PYG{p}{(}\PYG{k+kt}{uint32\PYGZus{}t}\PYG{p}{));}
+    \PYG{k}{for}\PYG{p}{(}\PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{row} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{p}{;} \PYG{n}{row} \PYG{o}{\PYGZlt{}} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{M}\PYG{p}{;} \PYG{n}{row}\PYG{o}{++}\PYG{p}{)} \PYG{p}{\PYGZob{}}
+        \PYG{k}{for}\PYG{p}{(}\PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{p} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{p}{;} \PYG{n}{p} \PYG{o}{\PYGZlt{}} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{P}\PYG{p}{;} \PYG{n}{p}\PYG{o}{++}\PYG{p}{)} \PYG{p}{\PYGZob{}}
+            \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{colIndex} \PYG{o}{=} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{columnIndices}\PYG{p}{[}\PYG{n}{row} \PYG{o}{*} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{P} \PYG{o}{+} \PYG{n}{p}\PYG{p}{];}
+            \PYG{k}{if}\PYG{p}{(}\PYG{n}{colIndex} \PYG{o}{!=} \PYG{n}{INVALID\PYGZus{}COLUMN}\PYG{p}{)} \PYG{p}{\PYGZob{}}
+                \PYG{n}{rowIndices}\PYG{p}{[}\PYG{n}{colFront}\PYG{p}{[}\PYG{n}{colIndex}\PYG{p}{]} \PYG{o}{+} \PYG{n}{colIndex} \PYG{o}{*} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{P}\PYG{p}{]} \PYG{o}{=} \PYG{n}{row}\PYG{p}{;}
+                \PYG{n}{colFront}\PYG{p}{[}\PYG{n}{colIndex}\PYG{p}{]} \PYG{o}{+=} \PYG{l+m+mi}{1}\PYG{p}{;}
+            \PYG{p}{\PYGZcb{}}
+        \PYG{p}{\PYGZcb{}}
+    \PYG{p}{\PYGZcb{}}
+    \PYG{n}{free}\PYG{p}{(}\PYG{n}{colFront}\PYG{p}{);}
+
+    \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{head} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{p}{;}
+    \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{colHead} \PYG{o}{=} \PYG{l+m+mi}{1}\PYG{p}{;}
+    \PYG{k}{for}\PYG{p}{(}\PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{col} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{p}{;} \PYG{n}{col} \PYG{o}{\PYGZlt{}} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{N}\PYG{p}{;} \PYG{n}{col}\PYG{o}{++}\PYG{p}{)} \PYG{p}{\PYGZob{}}
+        \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{p} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{p}{;}
+        \PYG{k}{for}\PYG{p}{(;} \PYG{n}{p} \PYG{o}{\PYGZlt{}} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{P} \PYG{o}{\PYGZam{}\PYGZam{}} \PYG{n}{rowIndices}\PYG{p}{[}\PYG{n}{col} \PYG{o}{*} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{P} \PYG{o}{+} \PYG{n}{p}\PYG{p}{]} \PYG{o}{!=} \PYG{n}{INVALID\PYGZus{}COLUMN}\PYG{p}{;} \PYG{n}{p}\PYG{o}{++}\PYG{p}{)} \PYG{p}{\PYGZob{}}
+            \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{ri} \PYG{o}{=} \PYG{n}{rowIndices}\PYG{p}{[}\PYG{n}{col} \PYG{o}{*} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{P} \PYG{o}{+} \PYG{n}{p}\PYG{p}{];}
+            \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{pp} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{p}{;}
+            \PYG{k}{for}\PYG{p}{(;(}\PYG{n}{pp} \PYG{o}{\PYGZlt{}} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{P}\PYG{p}{)} \PYG{o}{\PYGZam{}\PYGZam{}} \PYG{p}{(}\PYG{n}{matrix}\PYG{p}{.}\PYG{n}{columnIndices}\PYG{p}{[}\PYG{n}{ri} \PYG{o}{*} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{P} \PYG{o}{+} \PYG{n}{pp}\PYG{p}{]} \PYG{o}{!=} \PYG{n}{col}\PYG{p}{);} \PYG{n}{pp}\PYG{o}{++}\PYG{p}{)\PYGZob{}\PYGZcb{}}
+            \PYG{n}{result}\PYG{p}{.}\PYG{n}{floatdata}\PYG{p}{[}\PYG{n}{head}\PYG{p}{]}  \PYG{o}{=} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{floatdata}\PYG{p}{[}\PYG{n}{ri} \PYG{o}{*} \PYG{n}{matrix}\PYG{p}{.}\PYG{n}{P} \PYG{o}{+} \PYG{n}{pp}\PYG{p}{];}
+            \PYG{n}{result}\PYG{p}{.}\PYG{n}{rowIndices}\PYG{p}{[}\PYG{n}{head}\PYG{p}{]} \PYG{o}{=} \PYG{n}{ri}\PYG{p}{;}
+            \PYG{n}{head} \PYG{o}{+=} \PYG{l+m+mi}{1}\PYG{p}{;}
+        \PYG{p}{\PYGZcb{}}
+
+        \PYG{n}{result}\PYG{p}{.}\PYG{n}{columnOffsets}\PYG{p}{[}\PYG{n}{colHead}\PYG{p}{]} \PYG{o}{=} \PYG{n}{result}\PYG{p}{.}\PYG{n}{columnOffsets}\PYG{p}{[}\PYG{n}{colHead} \PYG{o}{\PYGZhy{}} \PYG{l+m+mi}{1}\PYG{p}{]} \PYG{o}{+} \PYG{n}{p}\PYG{p}{;}
+        \PYG{n}{colHead} \PYG{o}{+=} \PYG{l+m+mi}{1}\PYG{p}{;}
+    \PYG{p}{\PYGZcb{}}
+    \PYG{n}{free}\PYG{p}{(}\PYG{n}{rowIndices}\PYG{p}{);}
+
+    \PYG{k}{return} \PYG{n}{result}\PYG{p}{;}
+\PYG{p}{\PYGZcb{}}
+\end{Verbatim}

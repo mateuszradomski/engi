@@ -1,0 +1,478 @@
+\chapter{Implementacja}
+\label{cha:implementacja}
+
+W tym rozdziale opisana jest implementacja uruchomienia algorytmów mnożenia macierzy rzadkiej przez wektor na procesorze graficznym.
+Pierwszy podrozdział omawia opracowany sposób na komunikację z procesorem graficznym przy wykorzystaniu interfejsu \textit{Vulkan}.
+Drugi przedstawia sposób przechowywania danego formatu macierzy rzadkiej, konwersji na ten format oraz shader obliczeniowy, którego zadaniem jest obliczenie wyniku mnożenia macierz - wektor dla tego formatu.
+
+\section{Komunikacja z procesorem graficznym}
+\label{cha:graphics_comm}
+
+Aby rozpocząć komunikację z procesorem graficznym należy stworzyć obiekty skonfigurowane w taki sposób, w jaki zamierzamy ich używać. 
+Inicjalizacja stanu początkowego w interfejsie Vulkan sprowadza się do stworzenia instancji, wybrania fizycznego urządzenia oraz na jego podstawie stworzenia urządzenia logicznego, stworzenia puli zasobów, z których korzystać będą obiekty komend i kwerend.
+Podczas tworzenia instancji użytkownik ma możliwość podania tablicy z warstwami, które mają zostać włączone oraz rozszerzeń, które mają zostać dodane do danej instancji. 
+Warstwy to rozwiązanie problemu debugowania programów napisanych przy użyciu interfejsu \textit{Vulkan}.
+Ponieważ sterownik graficzny nie sprawdza poprawności przesłanych do niego danych znajdowanie źródeł błędów jest o wiele trudniejsze.
+Rozwiązaniem tego problemu są warstwy, czyli dodatkowy kod wykonywany dookoła wywołania funkcji. 
+Takie podejście można opisać jako wzorzec projektowy dekorator.
+Istnieje wiele warstw, które pełnią różne funkcje, przykładowo dodając warstwę zapisującą kiedy dana funkcja została wywołana możemy stworzyć graf wywołań w danym programie.
+Najbardziej pomocną warstwą podczas tworzenia aplikacja od nowa jest warstwa walidująca.
+Będzie ona sprawdzać poprawność przesłanych danych względem tego, co mówi specyfikacja.
+Niezgodności z nią są wypisane na terminalu, towarzyszy temu wytłumaczenie co, dokładnie jest niezgodne ze specyfikacją.
+Warstwa walidująca upewnia się, że program będzie działać tak samo niezależnie od wersji sterownika lub typu procesora graficznego.
+Niezgodność nie oznacza, że dany kod będzie skutkował błędnym wynikiem, natomiast nie ma gwarancji, że wynik ten nie zmieni się jeżeli domyślny stan będzie się różnić w innym środowisku pracy. 
+
+Wybór fizycznego urządzenia odbywa się poprzez wysłanie zapytania do interfejsu o enumerację wszystkich obecnych urządzeń w tym systemie.
+Użytkownik następnie dokonuje wyboru, który procesor graficzny spełnia jego wymagania. 
+Może dokonywać zapytań o to, jakie funkcjonalności wspiera dane urządzenie oraz jakie są jego specyfikacje.
+Nie można oczekiwać, że w systemie zawsze będzie znajdować się tylko jeden procesor graficzny.
+Przykładami systemów posiadających więcej niż jeden procesor graficzny mogą być laptopy z procesorem graficznym dedykowanym oraz zintegrowanym z jednostką centralną lub serwery, na których często znajduje się wiele takich samych procesorów graficznych współpracujących ze sobą.
+
+Na podstawie urządzenia fizycznego tworzone jest urządzenie logiczne.
+Wymaga ono opisania z jakich kolejek będzie korzystać program.
+Przykładowo, program graficzny będzie korzystać z kolejki wspierającej operacje graficzne, natomiast program uruchamiający tylko i wyłącznie shadery obliczeniowe będzie korzystać z kolejki wspierającej arbitralne obliczenia.
+Następnie użytkownik ma możliwość włączenia danych specjalnych funkcji procesora graficznego, przykładowo obsługa typu zmiennoprzecinkowego podwójnej precyzji, który domyślnie jest wyłączona.
+Dodatkowo, istnieje możliwość zdefiniowania rozszerzeń, które mają zostać włączone.
+Rozszerzeniami są nowe niezdefiniowane przez specyfikacje komendy, struktury i wartości enumeracyjne.
+Przykładem jest rozszerzenie \textit{VK\_NV\_COOPERATIVE\_MATRIX}, pozwalające użytkownikowi na wykorzystanie rdzeni tensorowych, znajdujących się tylko na urządzeniach najnowszych generacji od NVIDIA.
+Dodanie takiej funkcjonalności nie może być dodane przez specyfikację, ponieważ nie wszystkie procesory graficzne będą wspierać to rozszerzenie.
+Mimo wszystko posiadanie rozszerzeń do urządzenia pozwala interfejsowi \textit{Vulkan} być bardziej elastycznym w wspieraniu wielu pofragmentowanych rozwiązań.
+Po skonfigurowaniu tych opcji może zostać stworzone urządzenie logiczne, przy jego pomocy będzie wykonywana cała komunikacja z procesorem graficznym.
+Jako ostatni pobierany jest logiczny odnośnik do kolejki, na którą będzie wysyłana praca do wykonania przez procesor graficzny. 
+Ostatni krok w ogólnej inicjalizacji to stworzenie dwóch pul pamięci dla komend i kwerend.
+Podejście takie pozwala na posiadanie tylko jednego określonego miejsca, w którym znajduje się pamięć danej rzeczy, tym samym zwiększając lokalność pamięci.
+Stworzenie puli dla komend wymaga podania indeksu kolejki na urządzeniu fizycznym, do której będą wysyłane komendy zaalokowane w tej puli.
+Pula dla kwerend natomiast wymaga logicznego urządzenia, na którym będą wykonywane kwerendy, ich typ oraz maksymalna ilość.
+
+Na podstawie tego globalnego stanu zostają utworzone dodatkowe obiekty, będące odpowiedzialne za uruchomienie poszczególnych shaderów obliczeniowych dla danego formatu przechowywania macierzy.
+Dla każdego formatu są to te same obiekty tworzone w tej samej kolejności, natomiast różnią się na przykład rozmiarem lub ilością.
+Zbiór wszystkich obiektów potrzebnych do komunikacji z procesorem graficznym celem wywołania poszczególnego shadera dla wybranego typu macierzy nie będących stanem globalnym od tego miejsca nazwano scenariuszem.
+Każdy scenariusz zawierał następuje obiekty: pary buforów i pamięci, pulę deskryptorów, ich ułożenie oraz zbiór, definicję \textit{pipeline}'u oraz bufor komend.
+
+W zastosowanym rozwiązaniu każdy bufor przypisany jest do unikatowego obiektu pamięci, z tego względu zdecydowano zgrupować bufor i pamięć razem.
+W uproszczeniu, bufor jest wglądem do pamięci w zdefiniowanym zakresie, natomiast pamięć jest obiektem przy pomocy którego zarządzamy czasem życia danej alokacji pamięci.
+Takie rozwiązanie pozwala na stworzenie wielu różnych zmieniających się wglądów do zaalokowanej pamięci bez potrzeby jej ciągłej realokacji.
+Grupy bufora i pamięci zawsze były tworzone w parze, jedna reprezentowała pamięć, do której jednostka centralna ma dostęp natomiast druga reprezentowała pamięć lokalną dla procesora graficznego.
+Jest to wymagane, ponieważ jednostka centralna nie może bezpośrednio dokonywać arbitralnych operacji na lokalnej pamięci procesora graficznego.
+Bufor wykorzystywany do przepisywania pamięci z jednostki centralnej do pamięci procesora graficznego nazywa się buforem przestojowym (ang. staging buffer).
+Zanim bufor zostanie stworzony należy określić jego rozmiar, sposób współdzielenia pomiędzy kolejkami i to, w jaki sposób będzie wykorzystywany, np. dla bufora przestojowego wykorzystywana jest możliwość przechowywania danych oraz bycie źródłem podczas transferu.
+Po stworzeniu bufora należy dokonać kwerendy celem określenia wyrównanego rozmiaru pamięci oraz jakie typy pamięci, które posiada urządzenie będą wspierać wszystkie zdefiniowane sposoby wykorzystywania.
+Zaalokowanie pamięci wymaga odpytania urządzenia jakie posiada typy pamięci oraz w jakich kopcach się znajdują.
+Wybór typu pamięci sprowadza się do tego, czy istnieje pamięć będąca w stanie obsłużyć wszystkie wymagania bufora i czy jest wystarczająco blisko pamięci samego rdzenia mikro-procesora graficznego.
+Po wskazaniu wyrównanej ilości pamięci do zaalokowania oraz który typ pamięci ma zostać wykorzystany zostaje stworzony obiekt pamięci.
+Ten, finalnie może zostać przypisany do bufora.
+Operacje na pamięci przez jednostkę centralną w buforach wspierających tę operację dokonywane są poprzez zmapowanie tej pamięci do przestrzeni adresowej danego programu.
+Po tym, procesor ma dostęp do wszystkich bajtów w sposób równoważny pamięci zaalokowanej na przykład przez funkcję \textit{malloc}.
+Program ma obowiązek usunąć mapowanie pamięci przed wykorzystaniem jej do komunikacji z procesorem graficznym.
+Po przesłaniu wszystkich danych do buforów przestojowych następuje wykonanie komendy kopiowania danych z bufora do bufora.
+
+Zaprzęgnięcie procesora graficznego do faktycznego wykonywania pracy wymaga wysłania bufora z nagranymi komendami na daną kolejkę.
+Aby nagrać komendy potrzebne jest miejsce, które będzie zapisywać liniowy ciąg wywołanych komend, jest nim bufor komend, a do jego alokacji należy wskazać na pulę komend, która będzie zarządzać stworzonymi buforami komend.
+Taki bufor komend jest rozpoczynany i od tego momentu wszystkie wywołane procedury będące komendą są liniowo dodawane do tego bufora komend.
+Dla kopiowania danych bufora pamięci do drugiego bufora pamięci wywoływana jest komenda kopiowania buforów wskazująca, że należy przekopiować cały region, po tym zakończone jest nagrywanie bufora komend.
+Ten zostaje wysłany na kolejkę, która ma go wykonać, w przypadku implementowanego programu jest to kolejka obliczeniowa.
+Celem tworzonego programu jest zachowanie synchroniczności podczas komunikacji z procesorem graficznym, więc zaraz po zakolejkowaniu operacji program czeka, aż kolejka będzie bezczynna, co będzie wskazywać na wykonanie bufora komend.
+Dla kopiowania buforów pamięci bufor komend zostaje od razu zwolniony po jego wykonaniu.
+
+Pula deskryptorów pełni taką samą rolę jak pula komend i kwerend, alokacje deskryptorów są lokalizowane do danej puli ułatwiając zarządzanie.
+Deskryptor reprezentuje zasób dostępny shaderowi, na przykład bufor lub sampler tekstur.
+Zdefiniowanie deskryptora wymaga stworzenia obiektu zestawu deskryptorów, a to z kolei wymaga opisania układu deskryptorów w zestawie poprzez stworzenie obiektu układu zestawu deskryptorów.
+Podczas jego tworzenia określamy indeks w zestawie, pod którym ten deskryptor będzie dostępny, jego typ oraz ilość, a gdy ta jest większa niż jeden umożliwia to stworzenie tablicy obiektów, na przykład takich jak samplery tekstur w shaderze.
+Na podstawie jednego lub większej ilości układów zestawu deskryptorów zostaje stworzony obiekt zestawu deskryptorów, który obecnie jest tylko sposobem interpretacji podłączonych zasobów, natomiast nie posiada żadnych zasobów powiązanych ze sobą.
+Przypisanie buforów odbywa się poprzez aktualizacje zestawu deskryptorów, wymagane informacje to: który zestaw deskryptorów jest modyfikowany, który indeks w tym zestawie oraz ilość deskryptorów w tym indeksie, jakie należy zaktualizować.
+Sam zasób jest określany przez jeden z trzech różnych wskaźników na obrazy, bufory lub określony zakres bufora, dla buforów określany jest identyfikator bufora, przesunięcie względem początku oraz rozmiar, jaki ma być zmapowany.
+Ilość deskryptorów określa ilość elementów znajdujących się pod jednym z tych trzech wskaźników, to który z nich będzie wybrany określa typ deskryptora.
+
+Tak stworzony i zaktualizowany z przypisanymi buforami zestaw deskryptorów może następnie być wykorzystany podczas tworzenia \textit{pipeline}'u obliczeniowego.
+Będzie on uruchamiał dany shader, więc stworzony zostaje moduł shadera poprzez wykorzystanie danych binarnych w formacie SPIR-V.
+Następnie stworzony zostaje układu \textit{pipeline}'u, który wymaga podania zestawu deskryptorów oraz opcjonalnie zestawu stałych, które mają zostać przesłane do shadera.
+Ostatnimi informacjami do określenia to struktura opisująca etap \textit{pipeline}'u, posiada ona informacje o shaderze, takie jak jego moduł, nazwa funkcji wejściowej i typ etapu, w tym przypadku jest to etap obliczeniowy.
+Przy pomocy tych informacji zostaje stworzony \textit{pipeline} obliczeniowy, który hermetyzuje sposób uruchomienia danego shadera i informacji z nim związanych.
+
+Aby go uruchomić należy stworzyć nowy bufor komend, rozpocząć jego nagrywanie i wywołać następujące komendy: przypisanie \textit{pipeline}'u, przypisanie zestawu deskryptorów, zrestartowanie puli kwerend, wpisanie obecnego znacznika czasowego do puli kwerend, wywołanie $X \times Y \times Z$ grup inwokujący shader z tego \textit{pipeline}'u oraz wpisanego drugiego znacznika czasowego po zakończonych inwokacjach shadera, po czym nagrywanie bufora zostaje zakończone.
+Tak nagrany bufor komend zostaje przesłany na kolejkę obliczeniową urządzenia celem jego wykonania, gdy kolejka przejdzie w stan bezczynności wszystkie komendy zostały wykonane.
+Przy użyciu obiektu puli kwerend pobierane zostają dwa znaczniki czasowe, a różnica pomiędzy nimi opisuje czas potrzebny na wykonanie tego shadera dla użytych danych.
+
+\section{Implementacja mnożenia macierz - wektor dla każdego z formatów }
+\label{cha:impl_matrix_vec}
+
+Rozdział ten przedstawia sposób przechowywania w kodzie każdej z macierzy.
+Funkcję konwertującą na dany format oraz shader, który wykorzystuje ten format do obliczenia iloczynu macierz-wektor.
+
+\subsection{Format COO}
+\label{cha:coo_impl}
+
+Kod \ref{coo_struct} przedstawia strukturę będąca odpowiedzialna za przechowywanie danych potrzebnych do opisania macierzy rzadkiej w formacie COO.
+
+\begin{listing}[!ht]
+\begin{minted} [frame=lines, framesep=2mm, baselinestretch=1.2, fontsize=\footnotesize] {c}
+typedef struct MatrixCOO
+{
+    uint32_t M, N, elementNum; // wymiar M x N i ilość elementów niezerowych
+    float *floatdata;          // tablica wartości elementów
+    uint32_t *row, *col;       // odpowiednio tablice rzędów i kolumn elementów
+} MatrixCOO;
+\end{minted}
+\caption{Struktura definiująca macierz w formacie COO}
+\label{coo_struct}
+\end{listing}
+
+Konwersja na ten format macierzy odbywała się w sposób inny niż wszystkie pozostałe formaty.
+Dane potrzebne do wypełnienia tej macierzy pochodziły z pliku w formacie \textit{MatrixMarket} \cite{MatrixMarket}.
+Każda inna konwersja opierała się na danych z macierzy rzadkiej przechowywanej w innym formacie.
+Przetwarzanie danych z pliku opiera się na dużej ilości procesowania tekstu, więc dla ścisłości pominięto dokładny sposób implementacji części mniej krytycznych, w ich miejscu widnieje komentarz opisujący logiczny krok.
+
+\begin{listing}[!ht]
+\begin{minted} [frame=lines, framesep=2mm, baselinestretch=1.2, fontsize=\footnotesize] {c}
+MatrixCOO ReadMatrixFormatToCOO(const char *filename) {
+    MatrixCOO result = { 0 };
+
+    // Wczytaj plik do pamięci, przetwórz nagłówek celem wyciągnięcia potrzebnych flag 
+    // i pomiń komenatrze...
+
+    result.M = atoi(getRowNumString());
+    result.N = atoi(getColumnNumString());
+    uint32_t k = isSymmetric ? 2 : 1; // dla macierzy symetrycznych względem przekątnej
+    uint32_t elementNum = atoi(getElementNumString());
+    result.elementNum = elementNum * k - (k - 1) * result.N;
+    uint32_t toAllocate = result.elementNum * sizeof(result.floatdata[0]);
+    result.floatdata = malloc(toAllocate);
+    result.row = malloc(toAllocate);
+    result.col = malloc(toAllocate);
+
+    uint32_t elementIndex = 0;
+    while((line = NextInSplit(&lineIter)).bytes != NULL) // pętla po wszystkich liniach
+    {
+        uint32_t row = atoi(getElementRowString());
+        uint32_t col = atoi(getElementColumnString());
+        char *valueString = getElementValueString();
+        float value = strlen(valueString) == 0 ? 1.0f : atof(valueString);
+        result.row[elementIndex] = row - 1;
+        result.col[elementIndex] = col - 1;
+        result.floatdata[elementIndex] = value;
+        elementIndex += 1;
+
+        if(isSymmetric && col != row) {
+            result.row[elementIndex] = col;
+            result.col[elementIndex] = row;
+            result.floatdata[elementIndex] = value;
+            elementIndex += 1;
+        }
+    }
+
+    return result;
+}
+\end{minted}
+\caption{Funkcja tworząca macierz COO z pliku formatu MatrixMarket}
+\label{coo_convert}
+\end{listing}
+
+Pliki w formacie \textit{MatrixMarket} na samym początku posiadają nagłówek.
+Widnieją w nim informacje o genezie macierzy, jej autorach oraz odwołania do pracy, z której pochodzi.
+Poza tym, nagłówek posiada flagi opisujące typ macierzy.
+Przykładowo flaga \textit{symmetric} informuje użytkownika o tym, że macierz jest symetryczna względem przekątnej.
+W pliku zostają podane tylko wartości przekątnej oraz z nad przekątnej dla zaoszczędzenia miejsca.
+Podczas wczytywania danych program musi odbić wartości z nad przekątnej pod nią, aby poprawnie wczytać macierz. 
+Pierwszy wiersz nie będący nagłówkiem posiada zapisane wartości wymiaru macierzy oraz liczbę elementów niezerowych.
+Każdy następny wiersz składa się z kolumny, rzędu oraz opcjonalnie wartości elementu.
+Niepodanie wartości elementu skutkuje zapisaniem wartości równej jeden w to miejsce.
+Ponieważ rzędy oraz kolumny podawane są zaczynając od jedynki, zmniejszono ich wartości o jeden, aby uzyskać indeksy zaczynające się od zera.
+
+Funkcja \ref{coo_convert} ustawia flagę \textit{isSymmetric} zależnie od danych, które odczyta w nagłówku.
+Ustawia wymiar macierzy poprzez zamianę tekstu na liczbę funkcją \textit{atoi}.
+Ustala ilość elementów niezerowych biorąc pod uwagę, że format podaje ich ilość w pliku zamiast w finalnej macierzy.
+Na podstawie tej wartości określona zostaje liczba bajtów potrzebna do przechowania jednej z tablicy.
+Następnie pamięć ta jest alokowana i przypisywana do wszystkich trzech tablic.
+W pętli przechodząc przez wszystkie pozostałe linie odczytywana i zapisana jest wartość elementu jego rząd oraz kolumna.
+Jeżeli element nie znajduje się na przekątnej, wartość zostaje odbita pod nią.
+
+\begin{listing}[!ht]
+\begin{minted} [frame=lines, framesep=2mm, baselinestretch=1.2, fontsize=\footnotesize] {glsl}
+#version 450
+#extension GL_EXT_shader_atomic_float: enable
+
+#define WORKGROUP_SIZE 32
+layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1) in;
+
+layout(set = 0, binding = 0) buffer bufA {
+    uint elementNum, M, N;
+    float data[];
+};
+layout(set = 0, binding = 1) buffer bufARow   { uint rows[]; };
+layout(set = 0, binding = 2) buffer bufACol   { uint cols[]; };
+layout(set = 0, binding = 3) buffer bufInVec  { float inVec[]; };
+layout(set = 0, binding = 4) buffer bufOutVec { float outVec[]; };
+
+void main() {
+    const uint i = gl_GlobalInvocationID.x;
+
+    if(i < elementNum) { 
+        const uint row = rows[i];
+        const uint col = cols[i];
+
+        float prod = data[i] * inVec[col];
+        atomicAdd(outVec[row], prod);
+    }
+}
+\end{minted}
+\caption{Shader obliczeniowy wykorzystujący macierz COO}
+\label{coo_shader}
+\end{listing}
+
+Shader ukazany w kodzie \ref{coo_shader} oblicza wynik mnożenia macierzy w formacie COO z wektorem.
+Przyjmuje cztery bufory wejściowe i jeden wyjściowy.
+Pierwsze trzy opisują nagłówek macierzy, tablicę wartości, kolumn i rzędów elementów.
+Czwarta jest tablicą traktowaną jako wejściowy wektor, natomiast piąta jest wektorem wyjściowym. 
+Każda inwokacja shadera określa swój globalny identyfikator jako dostarczona przez shader zmienna \textit{gl\_GlobalInvocationID.x}.
+Zmienna ta określona na podstawie identyfikatora grupy, lokalnego identyfikatora wątku wewnątrz grupy oraz rozmiaru lokalnej grupy.
+Ta ustawiona jest na wartość równą 32, aby być kompatybilna z rozmiarem \textit{warp}'u, czyli najmniejszej jednostki przydzielenia pracy do \textit{SM}.
+Globalny identyfikator służy jako indeks do określenia jaką pracę ma wykonać każdy z wątków.
+Jeżeli indeks jest większy niż liczba wszystkich elementów wątek ten nie wykonuje żadnej pracy.
+W przeciwnym przypadku, wątek pobiera rząd oraz kolumnę elementu znajdującego się pod tym indeksem.
+Określa iloczyn wartości elementu z wartością w wejściowym wektorze znajdującym się pod indeksem kolumny elementu.
+Następnie atomicznie dodaje go do wartości wektora wyjściowego znajdującej się pod indeksem rzędu elementu.
+Atomiczna operacja wymagana jest ze względu na fakt, iż wątek ten nie ma wyłącznego dostępu do zapisu w tej komórce.
+Inne wątki w tym samym czasie mogą chcieć zapisać do tego samego miejsca co skutkuje wyścigiem danych.
+
+\subsection{Format CSR}
+\label{cha:csr_impl}
+
+Kod \ref{csr_struct} przedstawia strukturę będąca odpowiedzialna za przechowywanie danych potrzebnych do opisania macierzy rzadkiej w formacie CSR.
+
+\begin{listing}[!ht]
+\begin{minted} [frame=lines, framesep=2mm, baselinestretch=1.2, fontsize=\footnotesize] {c}
+typedef struct MatrixCSR
+{
+    uint32_t M, N, elementNum; // wymiar M x N i ilość elementów niezerowych
+    float *floatdata;          // tablica wartości elementów
+    uint32_t *columnIndices;   // tablica kolumn elementów
+    uint32_t *rowOffsets;      // tablica pierwszego indeksu elementu w rzędzie
+} MatrixCSR;
+\end{minted}
+\caption{Struktura definiująca macierz w formacie CSR}
+\label{csr_struct}
+\end{listing}
+
+Kod \ref{csr_convert} przedstawia funkcję, która tworzy macierz CSR wykorzystując do tego wejściową macierz ELL.
+Przepisuje ona bezpośrednio wymiar oraz liczbę elementów niezerowych.
+Alokuje pamięć do każdej z trzech tablicy.
+Pierwsza i druga przechowuje tyle samo elementów; liczbę niezerowych elementów w macierzy.
+Tablica \textit{rowOffsets} wymaga jest $M+1$ elementów do przechowania przesunięcia do dwóch poprzednich tablic.
+Zwiększanie długości o jeden odbywa się celem uproszczenia obliczania ilości elementów niezerowych znajdujących się w danym rzędzie.
+Iterując przez wszystkie rzędy macierzy wejściowej funkcja używa dwóch zmiennych: \textit{head} do przechowania miejsca zapisu kolejnego elementu oraz \textit{rowHead} celem przechowania miejsca zapisu kolejnego przesunięcia.
+Dla każdego rzędu iterowane zostają wszystkie kolumny, dopóki wartość w nich nie wskazuje na koniec danych w tym rzędzie.
+Przepisana zostaje wartość elementu i jej kolumna z macierzy ELL, zmienna \textit{head} jest inkrementowana, aby następnym razem zapisać do nowej komórki.
+Po wyjściu z tej pętli zmienna \textit{p} równa jest liczbie kolumn posiadających dane w tym rzędzie. 
+Zostaje ona dodana do poprzedniej wartości przesunięcia, aby utworzyć nową wartość zapisaną w \textit{rowOffsets}.
+
+\begin{listing}[!ht]
+\begin{minted} [frame=lines, framesep=2mm, baselinestretch=1.2, fontsize=\footnotesize] {c}
+MatrixCSR ELLToMatrixCSR(MatrixELL matrix) {
+    MatrixCSR result = { 0 };
+
+    result.M          = matrix.M;
+    result.N          = matrix.N;
+    result.elementNum = matrix.elementNum;
+    
+    result.floatdata     = malloc(result.elementNum * sizeof(result.floatdata[0]));
+    result.columnIndices = malloc(result.elementNum * sizeof(uint32_t));
+    result.rowOffsets    = malloc((result.M+1) * sizeof(uint32_t));
+    result.rowOffsets[0] = 0;
+
+    uint32_t head = 0;
+    uint32_t rowHead = 1;
+    for(uint32_t row = 0; row < matrix.M; row++)
+    {
+        uint32_t rowOffset = row * matrix.P;
+        uint32_t p = 0;
+        for(; p < matrix.P && matrix.columnIndices[rowOffset + p] != INVALID_COLUMN; p++) {
+            result.floatdata[head]     = matrix.floatdata[rowOffset + p];
+            result.columnIndices[head] = matrix.columnIndices[rowOffset + p];
+            head += 1;
+        }
+
+        result.rowOffsets[rowHead] = result.rowOffsets[rowHead - 1] + p;
+        rowHead += 1;
+    }
+    return result;
+}
+\end{minted}
+\caption{Funkcja tworząca macierz CSR na podstawie macierzy ELL}
+\label{csr_convert}
+\end{listing}
+
+Shader ukazany w kodzie \ref{csr_shader} oblicza wynik mnożenia macierzy w formacie CSR z wektorem.
+Bufery wejściowe są takie same jak w przypadku macierzy COO.
+Globalny identyfikator traktowany jest jako indeks rzędu, na którym mają zostać wykonane obliczenia.
+Jeżeli indeks jest większy niż liczba wszystkich rzędów wątek ten nie wykonuje żadnej pracy.
+W przeciwnym wypadku pobiera przesunięcie do tablic \textit{floatdata} i \textit{columnIndex}, pod którym zaczynają się elementy dla tego rzędu.
+Na podstawie tablicy \textit{rowOffsets} ustala również ilość elementów niezerowych w tym rzędzie jako różnica przesunięcia następnego rzędu a rzędu obecnego.
+Fakt, iż długość tablicy \textit{rowOffsets} jest o jeden większa niż liczba rzędów, a ostatni element równy jest liczbie wszystkich elementów niezerowych pozwala na uniknięcie potrzeby wykorzystania specjalnego wyjątku, w którym dla ostatniego rzędu wykorzystywana jest wartość \textit{elementNum}.
+Takie uproszczenie kodu pozwala mu na wyższą wydajność.
+Shader następnie, iterując po wszystkich niezerowych elementach, do lokalnej zmiennej \textit{sum} sumuje wszystkie iloczyny wartości elementów występujących w tym rzędzie.
+Ponieważ każdy wątek odpowiedzialny jest za unikatowy rząd, miejsce w pamięci wyjściowej jest zapisywane tylko przez jeden wątek. 
+Usuwa to potrzebę bazowania na operacjach atomicznych co przyśpiesza wykonanie shadera.
+
+\begin{listing}[!ht]
+\begin{minted} [frame=lines, framesep=2mm, baselinestretch=1.2, fontsize=\footnotesize] {glsl}
+#version 450
+
+#define WORKGROUP_SIZE 32
+layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1) in;
+
+layout(set = 0, binding = 0) buffer bufA {
+    uint elementNum, M, N;
+    float floatdata[];
+};
+layout(set = 0, binding = 1) buffer bufAColumnIndex { uint columnIndex[]; };
+layout(set = 0, binding = 2) buffer bufARowOffsets  { uint rowOffsets[]; };
+layout(set = 0, binding = 3) buffer inputVector     { float inVec[]; };
+layout(set = 0, binding = 4) buffer outputVector    { float outVec[]; };
+
+void main()
+{
+    const uint rowi = gl_GlobalInvocationID.x;
+    if(rowi < M) { 
+        const uint rowOffset = rowOffsets[rowi];
+        const uint nzCount = rowOffsets[rowi+1] - rowOffset;
+
+        float sum = 0.0;
+        for(uint coli = 0; coli < nzCount; coli++)
+        {
+            const uint cellOffset = rowOffset + coli;
+            sum += inVec[columnIndex[cellOffset]] * floatdata[cellOffset];
+        }
+        outVec[rowi] = sum;
+    }
+}
+\end{minted}
+\caption{Shader obliczeniowy wykorzystujący macierz CSR}
+\label{csr_shader}
+\end{listing}
+
+\subsection{Format CSC}
+\label{cha:csc_impl}
+
+Kod \ref{csc_struct} przedstawia strukturę będąca odpowiedzialna za przechowywanie danych potrzebnych do opisania macierzy rzadkiej w formacie CSC.
+
+\begin{listing}[!ht]
+\begin{minted} [frame=lines, framesep=2mm, baselinestretch=1.2, fontsize=\footnotesize] {c}
+typedef struct MatrixCSC
+{
+    u32 M, N, elementNum; // wymiar M x N i ilość elementów niezerowych
+    float *floatdata;     // tablica wartości elementów
+    u32 *rowIndices;      // tablica rzędów elementów
+    u32 *columnOffsets;   // tablica pierwszego indeksu elementu w kolumnie
+} MatrixCSC;
+\end{minted}
+\caption{Struktura definiująca macierz w formacie CSC}
+\label{csc_struct}
+\end{listing}
+
+Kod \ref{csc_convert} przedstawia funkcję, która tworzy macierz CSC wykorzystując do tego wejściową macierz ELL.
+Funkcja miejscami analogiczna jest z konwersją macierzy CSR z uwzględnieniem zamiany rzędów z kolumnami.
+Przy pomocy tablic \textit{rowIndices} i \textit{colFront} tablica \textit{columnIndices} macierzy ELL zostaje przekształcona celem zmiany kierunku przechowywania danych z rzędowego na kolumnowy.
+W następnym kroku dla każdej kolumny wewnętrzna pętla przechodzi przez wszystkie wiersze w tej kolumnie tak długo jak indeks rzędu nie wskazuje na brak danych.
+Wiedząc, w którym rzędzie znajduje się następny element tej kolumny wyszukany zostaje indeks \textit{pp}, pod którym wartość \textit{columnIndices} równa się obecnej kolumnie iteracyjnej.
+Przy pomocy tego indeksu wyciągnięta zostaje wartość elementu, która przypisywana jest do wyjściowej macierzy razem z indeksem rzędu.
+Po przejściu przez wewnętrzna pętle zostaje zapisane przesunięcie do tej kolumny w ten sam sposób co konwersji macierzy CSR.
+
+\begin{listing}[!ht]
+\begin{minted} [frame=lines, framesep=2mm, baselinestretch=1.2, fontsize=\footnotesize] {c}
+MatrixCSC ELLToMatrixCSC(MatrixELL matrix) {
+    MatrixCSC result = { 0 };
+
+    result.M = matrix.M;
+    result.N = matrix.N;
+    result.elementNum = matrix.elementNum;
+    result.floatdata        = malloc(result.elementNum * sizeof(result.floatdata[0]));
+    result.rowIndices       = malloc(result.elementNum * sizeof(uint32_t));
+    result.columnOffsets    = malloc((result.N+1) * sizeof(uint32_t));
+    result.columnOffsets[0] = 0;
+
+    uint32_t *rowIndices = malloc(matrix.N * matrix.P * sizeof(uint32_t));
+    uint32_t *colFront = calloc(1, matrix.N * sizeof(uint32_t));
+    memset(rowIndices, INVALID_COLUMN, matrix.N * matrix.P * sizeof(uint32_t));
+    for(uint32_t row = 0; row < matrix.M; row++) {
+        for(uint32_t p = 0; p < matrix.P; p++) {
+            uint32_t colIndex = matrix.columnIndices[row * matrix.P + p];
+            if(colIndex != INVALID_COLUMN) {
+                rowIndices[colFront[colIndex] + colIndex * matrix.P] = row;
+                colFront[colIndex] += 1;
+            }
+        }
+    }
+    free(colFront);
+
+    uint32_t head = 0;
+    uint32_t colHead = 1;
+    for(uint32_t col = 0; col < matrix.N; col++) {
+        uint32_t p = 0;
+        for(; p < matrix.P && rowIndices[col * matrix.P + p] != INVALID_COLUMN; p++) {
+            uint32_t ri = rowIndices[col * matrix.P + p];
+            uint32_t pp = 0;
+            for(;(pp < matrix.P) && (matrix.columnIndices[ri * matrix.P + pp] != col); pp++){}
+            result.floatdata[head]  = matrix.floatdata[ri * matrix.P + pp];
+            result.rowIndices[head] = ri;
+            head += 1;
+        }
+
+        result.columnOffsets[colHead] = result.columnOffsets[colHead - 1] + p;
+        colHead += 1;
+    }
+    free(rowIndices);
+
+    return result;
+}
+\end{minted}
+\caption{Funkcja tworząca macierz CSC na podstawie macierzy ELL}
+\label{csc_convert}
+\end{listing}
+
+Shader ukazany w kodzie \ref{csc_shader} oblicza wynik mnożenia macierzy w formacie CSC z wektorem.
+Bufory wejściowe są takie same jak w przypadku macierzy COO.
+Globalny identyfikator traktowany jest jako indeks kolumny, na którym mają zostać wykonane obliczenia.
+Jeżeli indeks jest większy niż liczba wszystkich rzędów kolumn ten nie wykonuje żadnej pracy.
+W przeciwnym wypadku pobiera przesunięcie do tablic \textit{floatdata} i \textit{rowIndex}, pod którym zaczynają się elementy dla tej kolumny.
+Na podstawie tablicy \textit{columnOffsets} ustala również ilość elementów niezerowych w tej kolumnie jako różnica przesunięcia następnej kolumny a kolumny obecnej.
+Shader następnie, iterując po wszystkich niezerowych elementach, oblicza produkt pomiędzy wektorem wejściowym a danym elementem macierzy w tej kolumnie.
+Ze względu na przechodzenie po kolumnach zamiast po rzędach dana inwokacja shadera nie gwarantuje wyłączności do danej komórki wektora wyjściowego.
+Uniknięcie wyścigu danych wymaga wykorzystania atomicznego operacji dodawania.
+
+\begin{listing}[!ht]
+\begin{minted} [frame=lines, framesep=2mm, baselinestretch=1.2, fontsize=\footnotesize] {glsl}
+#version 450
+#extension GL_EXT_shader_atomic_float: enable
+
+#define WORKGROUP_SIZE 32
+layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1) in;
+
+layout(set = 0, binding = 0) buffer bufA {
+    uint elementNum, M, N;
+    float floatdata[];
+};
+layout(set = 0, binding = 1) buffer bufAColumnIndex { uint rowIndex[]; };
+layout(set = 0, binding = 2) buffer bufARowOffsets  { uint colOffsets[]; };
+layout(set = 0, binding = 3) buffer inputVector     { float inVec[]; };
+layout(set = 0, binding = 4) buffer outputVector    { float outVec[]; };
+
+void main()
+{
+    const uint coli = gl_GlobalInvocationID.x;
+
+    if(coli < N) { 
+        const float inVecTerm = inVec[coli];
+        const uint colOffset = colOffsets[coli];
+        const uint nzCount = colOffsets[coli+1] - colOffset;
+
+        for(uint rowi = 0; rowi < nzCount; rowi++) {
+            const uint cellOffset = colOffset + rowi;
+            float prod = inVecTerm * floatdata[cellOffset];
+            atomicAdd(outVec[rowIndex[cellOffset]], sum);
+        }
+    }
+}
+\end{minted}
+\caption{Shader obliczeniowy wykorzystujący macierz CSC}
+\label{csc_shader}
+\end{listing}

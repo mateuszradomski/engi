@@ -1,0 +1,40 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{n}{MatrixCOO} \PYG{n+nf}{ReadMatrixFormatToCOO}\PYG{p}{(}\PYG{k}{const} \PYG{k+kt}{char} \PYG{o}{*}\PYG{n}{filename}\PYG{p}{)} \PYG{p}{\PYGZob{}}
+    \PYG{n}{MatrixCOO} \PYG{n}{result} \PYG{o}{=} \PYG{p}{\PYGZob{}} \PYG{l+m+mi}{0} \PYG{p}{\PYGZcb{};}
+
+    \PYG{c+c1}{// Wczytaj plik do pamięci, przetwórz nagłówek celem wyciągnięcia potrzebnych flag}
+    \PYG{c+c1}{// i pomiń komenatrze...}
+
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{M} \PYG{o}{=} \PYG{n}{atoi}\PYG{p}{(}\PYG{n}{getRowNumString}\PYG{p}{());}
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{N} \PYG{o}{=} \PYG{n}{atoi}\PYG{p}{(}\PYG{n}{getColumnNumString}\PYG{p}{());}
+    \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{k} \PYG{o}{=} \PYG{n}{isSymmetric} \PYG{o}{?} \PYG{l+m+mi}{2} \PYG{o}{:} \PYG{l+m+mi}{1}\PYG{p}{;} \PYG{c+c1}{// dla macierzy symetrycznych względem przekątnej}
+    \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{elementNum} \PYG{o}{=} \PYG{n}{atoi}\PYG{p}{(}\PYG{n}{getElementNumString}\PYG{p}{());}
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{elementNum} \PYG{o}{=} \PYG{n}{elementNum} \PYG{o}{*} \PYG{n}{k} \PYG{o}{\PYGZhy{}} \PYG{p}{(}\PYG{n}{k} \PYG{o}{\PYGZhy{}} \PYG{l+m+mi}{1}\PYG{p}{)} \PYG{o}{*} \PYG{n}{result}\PYG{p}{.}\PYG{n}{N}\PYG{p}{;}
+    \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{toAllocate} \PYG{o}{=} \PYG{n}{result}\PYG{p}{.}\PYG{n}{elementNum} \PYG{o}{*} \PYG{k}{sizeof}\PYG{p}{(}\PYG{n}{result}\PYG{p}{.}\PYG{n}{floatdata}\PYG{p}{[}\PYG{l+m+mi}{0}\PYG{p}{]);}
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{floatdata} \PYG{o}{=} \PYG{n}{malloc}\PYG{p}{(}\PYG{n}{toAllocate}\PYG{p}{);}
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{row} \PYG{o}{=} \PYG{n}{malloc}\PYG{p}{(}\PYG{n}{toAllocate}\PYG{p}{);}
+    \PYG{n}{result}\PYG{p}{.}\PYG{n}{col} \PYG{o}{=} \PYG{n}{malloc}\PYG{p}{(}\PYG{n}{toAllocate}\PYG{p}{);}
+
+    \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{elementIndex} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{p}{;}
+    \PYG{k}{while}\PYG{p}{((}\PYG{n}{line} \PYG{o}{=} \PYG{n}{NextInSplit}\PYG{p}{(}\PYG{o}{\PYGZam{}}\PYG{n}{lineIter}\PYG{p}{)).}\PYG{n}{bytes} \PYG{o}{!=} \PYG{n+nb}{NULL}\PYG{p}{)} \PYG{c+c1}{// pętla po wszystkich liniach}
+    \PYG{p}{\PYGZob{}}
+        \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{row} \PYG{o}{=} \PYG{n}{atoi}\PYG{p}{(}\PYG{n}{getElementRowString}\PYG{p}{());}
+        \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{col} \PYG{o}{=} \PYG{n}{atoi}\PYG{p}{(}\PYG{n}{getElementColumnString}\PYG{p}{());}
+        \PYG{k+kt}{char} \PYG{o}{*}\PYG{n}{valueString} \PYG{o}{=} \PYG{n}{getElementValueString}\PYG{p}{();}
+        \PYG{k+kt}{float} \PYG{n}{value} \PYG{o}{=} \PYG{n}{strlen}\PYG{p}{(}\PYG{n}{valueString}\PYG{p}{)} \PYG{o}{==} \PYG{l+m+mi}{0} \PYG{o}{?} \PYG{l+m+mf}{1.0f} \PYG{o}{:} \PYG{n}{atof}\PYG{p}{(}\PYG{n}{valueString}\PYG{p}{);}
+        \PYG{n}{result}\PYG{p}{.}\PYG{n}{row}\PYG{p}{[}\PYG{n}{elementIndex}\PYG{p}{]} \PYG{o}{=} \PYG{n}{row} \PYG{o}{\PYGZhy{}} \PYG{l+m+mi}{1}\PYG{p}{;}
+        \PYG{n}{result}\PYG{p}{.}\PYG{n}{col}\PYG{p}{[}\PYG{n}{elementIndex}\PYG{p}{]} \PYG{o}{=} \PYG{n}{col} \PYG{o}{\PYGZhy{}} \PYG{l+m+mi}{1}\PYG{p}{;}
+        \PYG{n}{result}\PYG{p}{.}\PYG{n}{floatdata}\PYG{p}{[}\PYG{n}{elementIndex}\PYG{p}{]} \PYG{o}{=} \PYG{n}{value}\PYG{p}{;}
+        \PYG{n}{elementIndex} \PYG{o}{+=} \PYG{l+m+mi}{1}\PYG{p}{;}
+
+        \PYG{k}{if}\PYG{p}{(}\PYG{n}{isSymmetric} \PYG{o}{\PYGZam{}\PYGZam{}} \PYG{n}{col} \PYG{o}{!=} \PYG{n}{row}\PYG{p}{)} \PYG{p}{\PYGZob{}}
+            \PYG{n}{result}\PYG{p}{.}\PYG{n}{row}\PYG{p}{[}\PYG{n}{elementIndex}\PYG{p}{]} \PYG{o}{=} \PYG{n}{col}\PYG{p}{;}
+            \PYG{n}{result}\PYG{p}{.}\PYG{n}{col}\PYG{p}{[}\PYG{n}{elementIndex}\PYG{p}{]} \PYG{o}{=} \PYG{n}{row}\PYG{p}{;}
+            \PYG{n}{result}\PYG{p}{.}\PYG{n}{floatdata}\PYG{p}{[}\PYG{n}{elementIndex}\PYG{p}{]} \PYG{o}{=} \PYG{n}{value}\PYG{p}{;}
+            \PYG{n}{elementIndex} \PYG{o}{+=} \PYG{l+m+mi}{1}\PYG{p}{;}
+        \PYG{p}{\PYGZcb{}}
+    \PYG{p}{\PYGZcb{}}
+
+    \PYG{k}{return} \PYG{n}{result}\PYG{p}{;}
+\PYG{p}{\PYGZcb{}}
+\end{Verbatim}

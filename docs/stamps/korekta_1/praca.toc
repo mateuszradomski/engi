@@ -1,0 +1,42 @@
+\boolfalse {citerequest}\boolfalse {citetracker}\boolfalse {pagetracker}\boolfalse {backtracker}\relax 
+\babel@toc {polish}{}
+\defcounter {refsection}{0}\relax 
+\contentsline {chapter}{\numberline {1}Wprowadzenie}{6}%
+\defcounter {refsection}{0}\relax 
+\contentsline {section}{\numberline {1.1}Cele pracy}{6}%
+\defcounter {refsection}{0}\relax 
+\contentsline {section}{\numberline {1.2}Zawartość pracy}{6}%
+\defcounter {refsection}{0}\relax 
+\contentsline {chapter}{\numberline {2}Mnożenie macierz-wektor dla macierzy rzadkich}{7}%
+\defcounter {refsection}{0}\relax 
+\contentsline {section}{\numberline {2.1}Problem mnożenia macierzy \emph {poprzez - standardowo jednak ''przez'', nie powtarzam tej uwagi dalej} wektor}{7}%
+\defcounter {refsection}{0}\relax 
+\contentsline {section}{\numberline {2.2}Macierze rzadkie}{7}%
+\defcounter {refsection}{0}\relax 
+\contentsline {section}{\numberline {2.3}Problem mnożenia macierzy rzadkiej poprzez wektor}{8}%
+\defcounter {refsection}{0}\relax 
+\contentsline {section}{\numberline {2.4}Formaty macierzy rzadkich}{8}%
+\defcounter {refsection}{0}\relax 
+\contentsline {chapter}{\numberline {3}Mikro-architektura, interfejs Vulkan i shadery obliczeniowe}{12}%
+\defcounter {refsection}{0}\relax 
+\contentsline {section}{\numberline {3.1}Mikro-architektura nowoczesnych procesorów graficznych}{12}%
+\defcounter {refsection}{0}\relax 
+\contentsline {section}{\numberline {3.2}Interfejs Vulkan}{13}%
+\defcounter {refsection}{0}\relax 
+\contentsline {section}{\numberline {3.3}Shadery obliczeniowe}{14}%
+\defcounter {refsection}{0}\relax 
+\contentsline {chapter}{\numberline {4}Implementacja}{16}%
+\defcounter {refsection}{0}\relax 
+\contentsline {section}{\numberline {4.1}Komunikacja z procesorem graficznym}{16}%
+\defcounter {refsection}{0}\relax 
+\contentsline {section}{\numberline {4.2}Implementacja mnożenia macierz - wektor dla każdego z formatów }{19}%
+\defcounter {refsection}{0}\relax 
+\contentsline {subsection}{\numberline {4.2.1}Format COO}{20}%
+\defcounter {refsection}{0}\relax 
+\contentsline {subsection}{\numberline {4.2.2}Format CSR}{22}%
+\defcounter {refsection}{0}\relax 
+\contentsline {subsection}{\numberline {4.2.3}Format CSC}{23}%
+\defcounter {refsection}{0}\relax 
+\contentsline {chapter}{\numberline {5}Wyniki}{28}%
+\defcounter {refsection}{0}\relax 
+\contentsline {chapter}{\numberline {6}Podsumowanie}{33}%

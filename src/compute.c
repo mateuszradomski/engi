@@ -18,7 +18,7 @@
 
 #define ARRAY_LEN(x) (sizeof(x)/sizeof(x[0]))
 
-#define RUNS_PER_VERSION 100
+#define RUNS_PER_VERSION 1000
 
 #define VK_CALL(f) 																				        \
 {																										\
@@ -414,8 +414,8 @@ createInstance()
 
     bool validationLayersSupported = areValidationLayersSupported();
 
+    const char *layerName = "VK_LAYER_KHRONOS_validation";
     if(validationLayersSupported) {
-        const char *layerName = "VK_LAYER_KHRONOS_validation";
         createInfo.enabledLayerCount = 1;
         createInfo.ppEnabledLayerNames = &layerName;
     } else {
@@ -1113,12 +1113,12 @@ destroyMatrixELL(MatrixELL mat)
 }
 
 static MatrixSELL
-ELLToMatrixSELL(MatrixELL matrix)
+ELLToMatrixSELL(MatrixELL matrix, uint32_t C)
 {
     double start = getWallTime();
     MatrixSELL result = { 0 };
 
-    result.C = 2;
+    result.C = C;
     result.M = matrix.M;
     result.N = matrix.N;
     result.elementNum = matrix.elementNum;
@@ -1201,6 +1201,100 @@ getMemorySizeMatrixSELL(MatrixSELL mat)
 
 static void
 destroyMatrixSELL(MatrixSELL mat)
+{
+    free(mat.floatdata);
+    free(mat.columnIndices);
+    free(mat.rowOffsets);
+}
+
+static MatrixSELLColumnMajor
+ELLToMatrixSELLColumnMajor(MatrixELL matrix, uint32_t C)
+{
+    double start = getWallTime();
+    MatrixSELLColumnMajor result = { 0 };
+
+    result.C = C;
+    result.M = matrix.M;
+    result.N = matrix.N;
+    result.elementNum = matrix.elementNum;
+
+    printf("[MatrixSELLColumnMajor Parse]: M = %u, N = %u, C = %u\n", result.M, result.N, result.C);
+
+    u32 totalDataAllocated = 0;
+
+    u32 sliceCount = DIV_CEIL(result.M, result.C);
+    u32 rowOffsetsSize = (sliceCount + 1) * sizeof(result.rowOffsets[0]);
+    result.rowOffsets = malloc(rowOffsetsSize);
+    memset(result.rowOffsets, 0, rowOffsetsSize);
+    totalDataAllocated += rowOffsetsSize;
+
+    u32 *P = malloc(result.C * sizeof(P[0]));
+    for(u32 i = 0; i < sliceCount; i++)
+    {
+        memset(P, 0, result.C * sizeof(P[0]));
+        u32 offset = i * result.C * matrix.P;
+        for(u32 sliceIdx = 0; sliceIdx < result.C && sliceIdx < (result.M - i * result.C); sliceIdx++)
+        {
+            for(u32 Pi = 0; Pi < matrix.P; Pi++)
+            {
+                P[sliceIdx] += matrix.columnIndices[Pi + sliceIdx*matrix.P + offset] != INVALID_COLUMN;
+            }
+        }
+
+        u32 lastOffset = result.rowOffsets[i];
+        u32 currentOffset = 0;
+        for(u32 i = 0; i < result.C; i++)
+        {
+            currentOffset = MAX(P[i], currentOffset);
+        }
+        currentOffset *= result.C;
+        result.rowOffsets[i+1] = currentOffset + lastOffset;
+    }
+
+    free(P);
+
+    u32 elementsToAllocate = result.rowOffsets[sliceCount];
+    u32 rawDataSize = elementsToAllocate * sizeof(result.columnIndices[0]);
+    result.columnIndices = malloc(rawDataSize);
+    result.floatdata = malloc(rawDataSize);
+    totalDataAllocated += 2 * rawDataSize;
+
+    for(u32 i = 0; i < sliceCount; i++)
+    {
+        u32 sliceP = (result.rowOffsets[i+1] - result.rowOffsets[i]) / result.C;
+
+        for(u32 sliceIdx = 0; sliceIdx < result.C && sliceIdx < (result.M - i * result.C); sliceIdx++)
+        {
+            u32 ELLOffset = (sliceIdx * matrix.P) + (i * result.C * matrix.P);
+            u32 SELLOffset = result.rowOffsets[i] + sliceIdx;
+            u32 *colDst  = result.columnIndices + SELLOffset;
+            u32 *colSrc  = matrix.columnIndices + ELLOffset;
+            float *dataDst = result.floatdata + SELLOffset;
+            float *dataSrc = matrix.floatdata + ELLOffset;
+            for(u32 sliceCol = 0; sliceCol < sliceP; sliceCol++) {
+                dataDst[sliceCol * C] = dataSrc[sliceCol];
+                colDst[sliceCol * C] = colSrc[sliceCol];
+            }
+        }
+    }
+
+    double end = getWallTime();
+    printf("[MatrixSELLColumnMajor Parse]: Parsing took %.2lfs and allocated %uMB\n", end - start, TO_MEGABYTES(totalDataAllocated));
+
+    return result;
+}
+
+static u32
+getMemorySizeMatrixSELLColumnMajor(MatrixSELLColumnMajor mat)
+{
+    u32 sliceCount = DIV_CEIL(mat.M, mat.C);
+    u32 elementsToAllocate = mat.rowOffsets[sliceCount];
+    u32 rawDataSize = elementsToAllocate * sizeof(mat.columnIndices[0]);
+    return 2 * rawDataSize;
+}
+
+static void
+destroyMatrixSELLColumnMajor(MatrixSELLColumnMajor mat)
 {
     free(mat.floatdata);
     free(mat.columnIndices);
@@ -1358,6 +1452,7 @@ ELLToMatrixBSR(MatrixELL matrix, u32 blockSize)
     result.blockSize = blockSize;
     result.MB = DIV_CEIL(matrix.M, result.blockSize);
     result.NB = DIV_CEIL(matrix.N, result.blockSize);
+    result.elementNum = matrix.elementNum;
 
     printf("[MatrixBSR Parse]: MB = %u, NB = %u\n", result.MB, result.NB);
 
@@ -1569,7 +1664,12 @@ checkIfVectorIsSame(VKState *state, VKBufferAndMemory ssbo, Vector expVec)
     for(u32 i = 0; i < expVec.len; i++)
     {
         float error = fabs(floatData[i] - expVec.floatdata[i]) / expVec.floatdata[i];
+        float k = maxError;
         maxError = MAX(error, maxError);
+
+        if(maxError != k) {
+            success = true;
+        }
 
         if(error > errorLimit) {
             printf("[Vector match check]: (i, lhs == rhs) => (%d, %f == %f)\n", i, floatData[i], expVec.floatdata[i]);
@@ -2211,11 +2311,160 @@ runScenarioSELL(VKState *state, ScenarioSELL *scn, MatrixSELL *matrix, Vector ex
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("SELL", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixSELL(*matrix), filename);
+    char *name = malloc(16);
+    sprintf(name, "SELL%d", matrix->C);
+    saveRunInfo(name, runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixSELL(*matrix), filename);
 }
 
 static void
 destroyScenarioSELL(VKState *state, ScenarioSELL *scn)
+{
+    vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
+    vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+
+    destroyBuffer(state, &scn->outVecDevice);
+    destroyBuffer(state, &scn->inVecDevice);
+    destroyBuffer(state, &scn->matFloatDevice);
+    destroyBuffer(state, &scn->matRowOffsetsDevice);
+    destroyBuffer(state, &scn->matHeaderAndColIndexDevice);
+
+    destroyBuffer(state, &scn->outVecHost);
+    destroyBuffer(state, &scn->inVecHost);
+    destroyBuffer(state, &scn->matFloatHost);
+    destroyBuffer(state, &scn->matRowOffsetsHost);
+    destroyBuffer(state, &scn->matHeaderAndColIndexHost);
+
+    vkFreeDescriptorSets(state->device, scn->descriptorPool, 1, &scn->descriptorSet);
+    vkDestroyDescriptorPool(state->device, scn->descriptorPool, NULL);
+    vkDestroyDescriptorSetLayout(state->device, scn->descriptorSetLayout, NULL);
+}
+
+static ScenarioSELLColumnMajor
+createScenarioSELLColumnMajor(VKState *state, MatrixSELLColumnMajor *matrix, Vector vec)
+{
+    ScenarioSELLColumnMajor result = { 0 };
+
+    result.descriptorSetLayout = createConsecutiveDescriptorSetLayout(state->device, 5);
+    result.descriptorPool = createDescriptorPool(state->device);
+    result.descriptorSet = createDescriptorSet(state->device, result.descriptorSetLayout, result.descriptorPool);
+
+    u32 sliceCount        = DIV_CEIL(matrix->M, matrix->C);
+    u32 elementsAllocated = matrix->rowOffsets[sliceCount];
+
+    u32 headerSize      = 3*sizeof(u32);
+    u32 columnIndicesSize = elementsAllocated * sizeof(matrix->columnIndices[0]);
+    u32 rowOffsetsSize  = (sliceCount+1) * sizeof(matrix->rowOffsets[0]);
+    u32 floatDataSize   = elementsAllocated * sizeof(matrix->floatdata[0]);
+    u32 vectorSize      = matrix->N*sizeof(matrix->floatdata[0]);
+
+    VkBufferUsageFlags srcUsageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    VkBufferUsageFlags dstUsageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    VkBufferUsageFlags bidUsageFlags = srcUsageFlags | dstUsageFlags;
+    VkMemoryPropertyFlagBits memoryFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    VkMemoryPropertyFlagBits deviceMemoryFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    // Staging buffers
+    result.matHeaderAndColIndexHost = createBuffer(state, headerSize + columnIndicesSize, srcUsageFlags, memoryFlags);
+    result.matRowOffsetsHost        = createBuffer(state, rowOffsetsSize, srcUsageFlags, memoryFlags);
+    result.matFloatHost             = createBuffer(state, floatDataSize, srcUsageFlags, memoryFlags);
+    result.inVecHost                = createBuffer(state, vectorSize, srcUsageFlags, memoryFlags);
+    result.outVecHost               = createBuffer(state, vectorSize, bidUsageFlags, memoryFlags);
+
+    // On device memory buffers
+    result.matHeaderAndColIndexDevice = createBuffer(state, headerSize + columnIndicesSize, dstUsageFlags, deviceMemoryFlags);
+    result.matRowOffsetsDevice        = createBuffer(state, rowOffsetsSize, dstUsageFlags, deviceMemoryFlags);
+    result.matFloatDevice             = createBuffer(state, floatDataSize, dstUsageFlags, deviceMemoryFlags);
+    result.inVecDevice                = createBuffer(state, vectorSize, dstUsageFlags, deviceMemoryFlags);
+    result.outVecDevice               = createBuffer(state, vectorSize, bidUsageFlags, deviceMemoryFlags);
+
+    {
+        VKBufferAndMemory ssbo = result.matHeaderAndColIndexHost;
+
+        void *mappedMemory = NULL;
+        vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+        u32 *u32MappedMemory = (u32 *)mappedMemory;
+        u32MappedMemory[0] = matrix->M;
+        u32MappedMemory[1] = matrix->C;
+        u32MappedMemory[2] = matrix->N;
+        u8 *data = (u8 *)(u32MappedMemory + 3);
+
+        memcpy(data, matrix->columnIndices, columnIndicesSize);
+
+        vkUnmapMemory(state->device, ssbo.bufferMemory);
+    }
+
+    {
+        VKBufferAndMemory ssbo = result.matRowOffsetsHost;
+
+        void *mappedMemory = NULL;
+        vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+        memcpy(mappedMemory, matrix->rowOffsets, rowOffsetsSize);
+
+        vkUnmapMemory(state->device, ssbo.bufferMemory);
+    }
+
+    {
+        VKBufferAndMemory ssbo = result.matFloatHost;
+
+        void *mappedMemory = NULL;
+        vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
+        memcpy(mappedMemory, matrix->floatdata, floatDataSize);
+
+        vkUnmapMemory(state->device, ssbo.bufferMemory);
+    }
+
+    InVecToSSBO(state, vec, result.inVecHost);
+
+    copyStagingBufferToDevice(state, result.matHeaderAndColIndexHost, result.matHeaderAndColIndexDevice);
+    copyStagingBufferToDevice(state, result.matRowOffsetsHost, result.matRowOffsetsDevice);
+    copyStagingBufferToDevice(state, result.matFloatHost, result.matFloatDevice);
+    copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
+    copyStagingBufferToDevice(state, result.outVecHost, result.outVecDevice);
+
+    VKBufferAndMemory buffers[] = {
+        result.matHeaderAndColIndexDevice,
+        result.matRowOffsetsDevice,
+        result.matFloatDevice,
+        result.inVecDevice,
+        result.outVecDevice
+    };
+    u32 offsets[] = { 0, 0, 0, 0, 0 };
+    bindDescriptorSetWithBuffers(state, result.descriptorSet, buffers, offsets, ARRAY_LEN(buffers));
+
+    result.pipelineDefinition = createComputePipeline(state->device, "build/shaders/sparse_matmul_sell_column_major.spv", result.descriptorSetLayout);
+
+    return result;
+}
+
+static void
+runScenarioSELLColumnMajor(VKState *state, ScenarioSELLColumnMajor *scn, MatrixSELLColumnMajor *matrix, Vector expVec, char *filename)
+{
+    u32 dispatchX = DIV_CEIL(matrix->M, WORKGROUP_SIZE);
+    u32 dispatchY = 1;
+    u32 dispatchZ = 1;
+
+    scn->commandBuffer = createCommandBuffer(state, &scn->pipelineDefinition, &scn->descriptorSet,
+                                             dispatchX, dispatchY, dispatchZ);
+
+    RunInformation runInfo[RUNS_PER_VERSION] = { 0 };
+    for(u32 i = 0; i < RUNS_PER_VERSION; i++)
+    {
+        u32 nonZeroCount = matrix->elementNum;
+        runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
+        runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e6;
+    }
+
+    copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
+    double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
+
+    char *name = malloc(16);
+    sprintf(name, "SELL%d", matrix->C);
+    saveRunInfo(name, runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixSELLColumnMajor(*matrix), filename);
+}
+
+static void
+destroyScenarioSELLColumnMajor(VKState *state, ScenarioSELLColumnMajor *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
@@ -2801,7 +3050,7 @@ runScenarioBSR(VKState *state, ScenarioBSR *scn, MatrixBSR *matrix, Vector expVe
         // the outVecHost holds zeroes for as long as we don't copy the last
         // result into it.
 		copyStagingBufferToDevice(state, scn->outVecHost, scn->outVecDevice);
-        u32 nonZeroCount = matrix->nnzb * matrix->blockSize * matrix->blockSize;
+        u32 nonZeroCount = matrix->elementNum;
         runInfo[i].time = runCommandBuffer(state, &scn->commandBuffer);
         runInfo[i].gflops = ((2 * nonZeroCount) / runInfo[i].time) / 1e6;
     }
@@ -2845,7 +3094,17 @@ runTestsForMatrix(VKState *state, char *filename)
 
     MatrixCOO matCOO   = ReadMatrixFormatToCOO(filename);
     MatrixELL matELL   = COOToMatrixELL(matCOO);
-    MatrixSELL matSELL = ELLToMatrixSELL(matELL);
+#if 0
+    MatrixSELL matSELL_2 = ELLToMatrixSELL(matELL, 2);
+    MatrixSELL matSELL_4 = ELLToMatrixSELL(matELL, 4);
+    MatrixSELL matSELL_8 = ELLToMatrixSELL(matELL, 8);
+#endif
+
+    MatrixSELLColumnMajor matSELL_CM_2 = ELLToMatrixSELLColumnMajor(matELL, 2);
+    MatrixSELLColumnMajor matSELL_CM_4 = ELLToMatrixSELLColumnMajor(matELL, 4);
+    MatrixSELLColumnMajor matSELL_CM_8 = ELLToMatrixSELLColumnMajor(matELL, 8);
+    MatrixSELLColumnMajor matSELL_CM_16 = ELLToMatrixSELLColumnMajor(matELL, 16);
+    MatrixSELLColumnMajor matSELL_CM_32 = ELLToMatrixSELLColumnMajor(matELL, 32);
     MatrixCSR matCSR   = ELLToMatrixCSR(matELL);
     MatrixCSC matCSC   = ELLToMatrixCSC(matELL);
     MatrixBSR matBSR_2 = ELLToMatrixBSR(matELL, 2);
@@ -2863,21 +3122,39 @@ runTestsForMatrix(VKState *state, char *filename)
     runScenarioELL(state, &scnELL, &matELL, expVec, filename);
     destroyScenarioELL(state, &scnELL);
 
-    ScenarioELLBufferOffset scnELLBufferOffset = createScenarioELLBufferOffset(state, &matELL, vec);
-    runScenarioELLBufferOffset(state, &scnELLBufferOffset, &matELL, expVec, filename);
-    destroyScenarioELLBufferOffset(state, &scnELLBufferOffset);
+#if 0
+    ScenarioSELL scnSELL_2 = createScenarioSELL(state, &matSELL_2, vec);
+    runScenarioSELL(state, &scnSELL_2, &matSELL_2, expVec, filename);
+    destroyScenarioSELL(state, &scnSELL_2);
 
-    ScenarioELL2Buffer scnELL2Buffer = createScenarioELL2Buffer(state, &matELL, vec);
-    runScenarioELL2Buffer(state, &scnELL2Buffer, &matELL, expVec, filename);
-    destroyScenarioELL2Buffer(state, &scnELL2Buffer);
+    ScenarioSELL scnSELL_4 = createScenarioSELL(state, &matSELL_4, vec);
+    runScenarioSELL(state, &scnSELL_4, &matSELL_4, expVec, filename);
+    destroyScenarioSELL(state, &scnSELL_4);
 
-    ScenarioSELL scnSELL = createScenarioSELL(state, &matSELL, vec);
-    runScenarioSELL(state, &scnSELL, &matSELL, expVec, filename);
-    destroyScenarioSELL(state, &scnSELL);
+    ScenarioSELL scnSELL_8 = createScenarioSELL(state, &matSELL_8, vec);
+    runScenarioSELL(state, &scnSELL_8, &matSELL_8, expVec, filename);
+    destroyScenarioSELL(state, &scnSELL_8);
+#endif
 
-    ScenarioSELLOffsets scnSELLOffsets = createScenarioSELLOffsets(state, &matSELL, vec);
-    runScenarioSELLOffsets(state, &scnSELLOffsets, &matSELL, expVec, filename);
-    destroyScenarioSELLOffsets(state, &scnSELLOffsets);
+    ScenarioSELLColumnMajor scnSELL_CM_2 = createScenarioSELLColumnMajor(state, &matSELL_CM_2, vec);
+    runScenarioSELLColumnMajor(state, &scnSELL_CM_2, &matSELL_CM_2, expVec, filename);
+    destroyScenarioSELLColumnMajor(state, &scnSELL_CM_2);
+
+    ScenarioSELLColumnMajor scnSELL_CM_4 = createScenarioSELLColumnMajor(state, &matSELL_CM_4, vec);
+    runScenarioSELLColumnMajor(state, &scnSELL_CM_4, &matSELL_CM_4, expVec, filename);
+    destroyScenarioSELLColumnMajor(state, &scnSELL_CM_4);
+
+    ScenarioSELLColumnMajor scnSELL_CM_8 = createScenarioSELLColumnMajor(state, &matSELL_CM_8, vec);
+    runScenarioSELLColumnMajor(state, &scnSELL_CM_8, &matSELL_CM_8, expVec, filename);
+    destroyScenarioSELLColumnMajor(state, &scnSELL_CM_8);
+
+    ScenarioSELLColumnMajor scnSELL_CM_16 = createScenarioSELLColumnMajor(state, &matSELL_CM_16, vec);
+    runScenarioSELLColumnMajor(state, &scnSELL_CM_16, &matSELL_CM_16, expVec, filename);
+    destroyScenarioSELLColumnMajor(state, &scnSELL_CM_16);
+
+    ScenarioSELLColumnMajor scnSELL_CM_32 = createScenarioSELLColumnMajor(state, &matSELL_CM_32, vec);
+    runScenarioSELLColumnMajor(state, &scnSELL_CM_32, &matSELL_CM_32, expVec, filename);
+    destroyScenarioSELLColumnMajor(state, &scnSELL_CM_32);
 
     ScenarioCSR scnCSR = createScenarioCSR(state, &matCSR, vec);
     runScenarioCSR(state, &scnCSR, &matCSR, expVec, filename);
@@ -2901,8 +3178,16 @@ runTestsForMatrix(VKState *state, char *filename)
 
     destroyMatrixCOO(matCOO);
     destroyMatrixELL(matELL);
-    destroyMatrixSELL(matSELL);
-
+#if 0
+    destroyMatrixSELL(matSELL_2);
+    destroyMatrixSELL(matSELL_4);
+    destroyMatrixSELL(matSELL_8);
+#endif
+    destroyMatrixSELLColumnMajor(matSELL_CM_2);
+    destroyMatrixSELLColumnMajor(matSELL_CM_4);
+    destroyMatrixSELLColumnMajor(matSELL_CM_8);
+    destroyMatrixSELLColumnMajor(matSELL_CM_16);
+    destroyMatrixSELLColumnMajor(matSELL_CM_32);
     destroyMatrixCSR(matCSR);
     destroyMatrixCSC(matCSC);
     destroyMatrixBSR(matBSR_2);
@@ -2924,19 +3209,26 @@ int main()
 #endif
 
 #if 1
+#if 1
     char *matricies[] = {
         "data/beaflw.mtx",
-        "data/bcsstk02.mtx",
-        "data/bcsstk30.mtx",
         "data/bcsstk32.mtx",
-        "data/s3dkt3m2.mtx",
-        "data/s3dkq4m2.mtx"
+        "data/dense2.mtx",
+        "data/scircuit.mtx",
+        "data/Ga41As41H72.mtx"
     };
+#else
+    char *matricies[] = {
+         "data/beaflw.mtx",
+         "data/scircuit.mtx" 
+         };
+#endif
 
     for(u32 i = 0; i < ARRAY_LEN(matricies); i++)
     {
         runTestsForMatrix(&state, matricies[i]);
         printRunStats();
+        glob_rand_state = 0x34fae2;
     }
 #endif
 

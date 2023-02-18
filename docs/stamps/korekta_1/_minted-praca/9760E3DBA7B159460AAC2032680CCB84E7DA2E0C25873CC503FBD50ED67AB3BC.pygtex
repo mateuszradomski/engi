@@ -1,0 +1,8 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k}{typedef} \PYG{k}{struct} \PYG{n}{MatrixCOO}
+\PYG{p}{\PYGZob{}}
+    \PYG{k+kt}{uint32\PYGZus{}t} \PYG{n}{M}\PYG{p}{,} \PYG{n}{N}\PYG{p}{,} \PYG{n}{elementNum}\PYG{p}{;} \PYG{c+c1}{// wymiar M x N i ilość elementów niezerowych}
+    \PYG{k+kt}{float} \PYG{o}{*}\PYG{n}{floatdata}\PYG{p}{;}          \PYG{c+c1}{// tablica wartości elementów}
+    \PYG{k+kt}{uint32\PYGZus{}t} \PYG{o}{*}\PYG{n}{row}\PYG{p}{,} \PYG{o}{*}\PYG{n}{col}\PYG{p}{;}       \PYG{c+c1}{// odpowiednio tablice rzędów i kolumn elementów}
+\PYG{p}{\PYGZcb{}} \PYG{n}{MatrixCOO}\PYG{p}{;}
+\end{Verbatim}
