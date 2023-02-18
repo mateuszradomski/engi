@@ -451,7 +451,7 @@ findPhysicalDevice(VkInstance instance)
 
     // TODO(radomski): Choose the most powerfull GPU
     printf("[Vulkan Init]: deviceCount = %u\n", deviceCount);
-    VkPhysicalDevice result = devicesArray[0];
+    VkPhysicalDevice result = devicesArray[deviceCount - 1];
     free(devicesArray);
 
     VkPhysicalDeviceProperties props = { 0 };
@@ -3039,7 +3039,7 @@ createScenarioBSR(VKState *state, MatrixBSR *matrix, Vector vec)
 static void
 runScenarioBSR(VKState *state, ScenarioBSR *scn, MatrixBSR *matrix, Vector expVec, char *filename)
 {
-    u32 dispatchX = DIV_CEIL(matrix->MB, WORKGROUP_SIZE);
+    u32 dispatchX = DIV_CEIL(matrix->MB * matrix->blockSize, WORKGROUP_SIZE);
     u32 dispatchY = 1;
     u32 dispatchZ = 1;
 

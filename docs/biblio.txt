@@ -8,3 +8,11 @@ Using GPUs for mars simulation
 https://ieeexplore.ieee.org/abstract/document/9904457
 https://www.cs.cmu.edu/afs/cs/academic/class/15869-f11/www/readings/lindholm08_tesla.pdf // cite this as Tesla source
 https://sci-hub.st/10.1109/IMCSIT.2008.4747253 // banaś in this shiiit
+
+
+
+
+
+
+// WHY IS MY SHIT SLOW??????????????
+https://medium.com/gpgpu/block-sparse-matrix-vector-multiplication-with-cuda-4e616b30267
