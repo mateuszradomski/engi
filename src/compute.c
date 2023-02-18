@@ -269,13 +269,13 @@ void sort(void * arr, size_t data_size, size_t elem_size, int(*compare)(void * x
 }
 
 static void
-saveResultsToFile(RunInfoNode *node)
+saveResultsToFile(RunInfoNode *node, u32 prefixId)
 {
 #if defined(WIN32)
     char *basename = strstr(node->filename, "/") + 1;
 
     char filename[MAX_PATH] = { 0 };
-    sprintf(filename, "result_%s_%s.json", basename, node->name);
+    sprintf(filename, "%c_result_%s_%s.json", 'a' + prefixId, basename, node->name);
     HANDLE fileHandle = CreateFileA(filename, GENERIC_READ | GENERIC_WRITE, 0x0, 0x0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0x0);
 
     char *scratchBuffer = malloc(8 * 1024 * 1024);
@@ -320,15 +320,16 @@ printRunStats()
     RunInfoNode *node = runInfos.head;
     char *basename = strstr(node->filename, "/") + 1;
     char buffer[128] = { 0 };
-    sprintf(buffer, "%d_%.*s", matrixNum, (size_t)strstr(basename, ".") - (size_t)basename, basename);
+    sprintf(buffer, "%d_%.*s", matrixNum, (int)((size_t)strstr(basename, ".") - (size_t)basename), basename);
     CreateDirectory(buffer, 0x0);
     SetCurrentDirectory(buffer);
 
     RunInfoSummary *summaries = malloc(128 * sizeof(RunInfoSummary));
     u32 summaryCount = 0;
+    u32 resultCounter = 0;
     while(node)
     {
-        saveResultsToFile(node);
+        saveResultsToFile(node, resultCounter++);
 
         double gflopSum = 0.0;
         double timeSum = 0.0;
@@ -3120,6 +3121,14 @@ runTestsForMatrix(VKState *state, char *filename)
     runScenarioCOO(state, &scnCOO, &matCOO, expVec, filename);
     destroyScenarioCOO(state, &scnCOO);
 
+    ScenarioCSR scnCSR = createScenarioCSR(state, &matCSR, vec);
+    runScenarioCSR(state, &scnCSR, &matCSR, expVec, filename);
+    destroyScenarioCSR(state, &scnCSR);
+
+    ScenarioCSC scnCSC = createScenarioCSC(state, &matCSC, vec);
+    runScenarioCSC(state, &scnCSC, &matCSC, expVec, filename);
+    destroyScenarioCSC(state, &scnCSC);
+
     ScenarioELL scnELL = createScenarioELL(state, &matELL, vec);
     runScenarioELL(state, &scnELL, &matELL, expVec, filename);
     destroyScenarioELL(state, &scnELL);
@@ -3157,14 +3166,6 @@ runTestsForMatrix(VKState *state, char *filename)
     ScenarioSELLColumnMajor scnSELL_CM_32 = createScenarioSELLColumnMajor(state, &matSELL_CM_32, vec);
     runScenarioSELLColumnMajor(state, &scnSELL_CM_32, &matSELL_CM_32, expVec, filename);
     destroyScenarioSELLColumnMajor(state, &scnSELL_CM_32);
-
-    ScenarioCSR scnCSR = createScenarioCSR(state, &matCSR, vec);
-    runScenarioCSR(state, &scnCSR, &matCSR, expVec, filename);
-    destroyScenarioCSR(state, &scnCSR);
-
-    ScenarioCSC scnCSC = createScenarioCSC(state, &matCSC, vec);
-    runScenarioCSC(state, &scnCSC, &matCSC, expVec, filename);
-    destroyScenarioCSC(state, &scnCSC);
 
     ScenarioBSR scnBSR_2 = createScenarioBSR(state, &matBSR_2, vec);
     runScenarioBSR(state, &scnBSR_2, &matBSR_2, expVec, filename);

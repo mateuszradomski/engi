@@ -34,9 +34,9 @@ dirs = glob.glob("results/*")
 
 def myplot(kd, n, xticklabels, ylabel, ylim, title, outfilename):
     index = np.arange(n)
-    bar_width = 0.4 /5
+    bar_width = 0.4 /6
 
-    fig, ax = plt.subplots(figsize=(8, 4))
+    fig, ax = plt.subplots(figsize=(9, 4))
     NUM_COLORS = len(kd)
     cm = plt.get_cmap('gnuplot2')
     ax.set_prop_cycle('color', [cm(1.*i/NUM_COLORS) for i in range(NUM_COLORS)])
@@ -46,10 +46,10 @@ def myplot(kd, n, xticklabels, ylabel, ylim, title, outfilename):
 
     ax.legend(ncol=len(kd)//2)
     ax.set_xticklabels(xticklabels)
-    ax.set_xticks(index + 4.5*bar_width)
+    ax.set_xticks(index + 5.5*bar_width)
     ax.set_ylim(0,ylim)
     ax.set_ylabel(ylabel)
-    ax.annotate("2.46", (0.25,1.3), xycoords='data', xytext=(-0.2, 1), 
+    ax.annotate("2.46", (0.0,1.3), xycoords='data', xytext=(0.4, 1), 
      arrowprops=dict(arrowstyle="->", connectionstyle="arc3"),
             horizontalalignment='left', verticalalignment='top')
     fig.suptitle(title)
@@ -71,7 +71,7 @@ for directory in dirs:
         time_ms_avg = sum(time_mss) / len(time_mss)
         memorytime = 1/(time_ms_avg * (size / (1000**2)))
         size_array.append(size / (1000 * 1000))
-        label = re.findall(r'(BSR[2-8]|COO|CSC|CSR|ELL|SELL[2-8])', f)[0]
+        label = re.findall(r'(BSR[2-8]|COO|CSC|CSR|ELL|SELL[0-9]+)', f)[0]
         if label not in kd:
             kd[label] = []
         kd[label].append(memorytime)

@@ -4,7 +4,5 @@
 @REM popd
 
 @REM Generate barcharts
-pushd plots
-python barplot_gflop.py
-python barplot_memorytime.py
-popd
+python plots\barplot_gflop.py
+python plots\barplot_memorytime.py
