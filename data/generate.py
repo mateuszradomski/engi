@@ -1,3 +1,7 @@
+"""
+This is used to generate dense2.mtx
+"""
+
 import random
 x = 2000
 y = 2000

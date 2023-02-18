@@ -1,3 +1,7 @@
+"""
+Generates GFLOP x Memory usage for each matrix format in a given sparse matrix
+"""
+
 import glob
 import json
 import os

@@ -1,15 +1,12 @@
+"""
+Generates scatter plots of each sparse matrix as a .png
+"""
+
 import scipy.sparse as sparse
 import scipy.io
 import matplotlib.pyplot as plt
 
 def fastspy(A, ax, cmap=None):
-    """"
-    Parameters
-    ----------
-    A : coo matrix
-    ax : axis
-    """
-
     m, n = A.shape
     #ax.hold(True)
 
