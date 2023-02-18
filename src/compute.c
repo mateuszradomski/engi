@@ -315,10 +315,12 @@ printRunStats()
     CreateDirectory(dirName, 0x0);
     SetCurrentDirectory(dirName);
 
+    static int matrixNum = 0;
+    matrixNum++;
     RunInfoNode *node = runInfos.head;
     char *basename = strstr(node->filename, "/") + 1;
     char buffer[128] = { 0 };
-    strncpy(buffer, basename, (size_t)strstr(basename, ".") - (size_t)basename);
+    sprintf(buffer, "%d_%.*s", matrixNum, (size_t)strstr(basename, ".") - (size_t)basename, basename);
     CreateDirectory(buffer, 0x0);
     SetCurrentDirectory(buffer);
 
