@@ -230,7 +230,7 @@ readEntireFileStr(const char *filename)
 }
 
 static void
-saveRunInfo(char *name, RunInformation *runInfo, u32 len, double maxError, u32 matrixSize, char *filename)
+saveRunInfo(char *name, RunInformation *runInfo, u32 len, double maxError, u32 matrixSize, u32 nonZeroCount, char *filename)
 {
     RunInfoNode *node = malloc(sizeof(RunInfoNode));
 
@@ -242,6 +242,7 @@ saveRunInfo(char *name, RunInformation *runInfo, u32 len, double maxError, u32 m
     node->infos = malloc(sizeof(RunInformation) * len);
     node->matrixSize = matrixSize;
     node->filename = filename;
+    node->nonZeroCount = nonZeroCount;
     memcpy(node->infos, runInfo, sizeof(RunInformation) * len);
 }
 
@@ -281,8 +282,8 @@ saveResultsToFile(RunInfoNode *node, u32 prefixId)
     char *scratchBuffer = malloc(8 * 1024 * 1024);
     char *writeHead = scratchBuffer;
 
-    writeHead += sprintf(writeHead, "{ \"matrix_format\": \"%s\", \"matrix_name\": \"%s\", \"matrix_size\": %d, \"max_error\": %f,\n\"data\":[\n",
-                         node->name, node->filename, node->matrixSize, node->maxError);
+    writeHead += sprintf(writeHead, "{ \"matrix_format\": \"%s\", \"matrix_name\": \"%s\", \"matrix_size\": %d, \"non_zero_count\": %d, \"max_error\": %f,\n\"data\":[\n",
+                         node->name, node->filename, node->matrixSize, node->nonZeroCount, node->maxError);
     for(u32 i = 0; i < node->len; i++)
     {
         writeHead += sprintf(writeHead, "{ \"gflop\": %f, \"time_ms\": %f },\n", node->infos[i].gflops, node->infos[i].time);
@@ -1818,7 +1819,7 @@ runScenarioCOO(VKState *state, ScenarioCOO *scn, MatrixCOO *matrix, Vector expVe
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("COO", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixCOO(*matrix), filename);
+    saveRunInfo("COO", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixCOO(*matrix), matrix->elementNum, filename);
 }
 
 static void
@@ -1933,7 +1934,7 @@ runScenarioELL(VKState *state, ScenarioELL *scn, MatrixELL *matrix, Vector expVe
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("ELL", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixELL(*matrix), filename);
+    saveRunInfo("ELL", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixELL(*matrix), matrix->elementNum, filename);
 }
 
 static void
@@ -2046,7 +2047,7 @@ runScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn, MatrixE
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("ELLBufferOffset", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixELL(*matrix), filename);
+    saveRunInfo("ELLBufferOffset", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixELL(*matrix), matrix->elementNum, filename);
 }
 
 static void
@@ -2171,7 +2172,7 @@ runScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn, MatrixELL *matrix
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("ELL2Buffer", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixELL(*matrix), filename);
+    saveRunInfo("ELL2Buffer", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixELL(*matrix), matrix->elementNum, filename);
 }
 
 static void
@@ -2316,7 +2317,7 @@ runScenarioSELL(VKState *state, ScenarioSELL *scn, MatrixSELL *matrix, Vector ex
 
     char *name = malloc(16);
     sprintf(name, "SELL%d", matrix->C);
-    saveRunInfo(name, runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixSELL(*matrix), filename);
+    saveRunInfo(name, runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixSELL(*matrix), matrix->elementNum, filename);
 }
 
 static void
@@ -2463,7 +2464,7 @@ runScenarioSELLColumnMajor(VKState *state, ScenarioSELLColumnMajor *scn, MatrixS
 
     char *name = malloc(16);
     sprintf(name, "SELL%d", matrix->C);
-    saveRunInfo(name, runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixSELLColumnMajor(*matrix), filename);
+    saveRunInfo(name, runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixSELLColumnMajor(*matrix), matrix->elementNum, filename);
 }
 
 static void
@@ -2592,7 +2593,7 @@ runScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn, MatrixSELL *mat
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("SELLOffsets", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixSELL(*matrix), filename);
+    saveRunInfo("SELLOffsets", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixSELL(*matrix), matrix->elementNum, filename);
 }
 
 static void
@@ -2742,7 +2743,7 @@ runScenarioCSR(VKState *state, ScenarioCSR *scn, MatrixCSR *matrix, Vector expVe
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("CSR", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixCSR(*matrix), filename);
+    saveRunInfo("CSR", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixCSR(*matrix), matrix->elementNum, filename);
 }
 
 static void
@@ -2901,7 +2902,7 @@ runScenarioCSC(VKState *state, ScenarioCSC *scn, MatrixCSC *matrix, Vector expVe
     copyStagingBufferToDevice(state, scn->outVecDevice, scn->outVecHost);
     double maxError = checkIfVectorIsSame(state, scn->outVecHost, expVec);
 
-    saveRunInfo("CSC", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixCSC(*matrix), filename);
+    saveRunInfo("CSC", runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixCSC(*matrix), matrix->elementNum, filename);
 }
 
 static void
@@ -3063,7 +3064,7 @@ runScenarioBSR(VKState *state, ScenarioBSR *scn, MatrixBSR *matrix, Vector expVe
 
     char *name = malloc(16);
     sprintf(name, "BSR%d", matrix->blockSize);
-    saveRunInfo(name, runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixBSR(*matrix), filename);
+    saveRunInfo(name, runInfo, ARRAY_LEN(runInfo), maxError, getMemorySizeMatrixBSR(*matrix), matrix->elementNum, filename);
 }
 
 static void
