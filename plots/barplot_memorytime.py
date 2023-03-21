@@ -89,4 +89,4 @@ xticklabels = [k.replace("results\\", "")[2:] for k in dirs]
 ylabel = "$\\frac{k}{k_{CSR}}$"
 title = "Efektywność $k$ różnych formatów macierzy w SpMV dla wybranych macierzy"
 outfilename = "plots\\barchart_memory.png"
-myplot(scaled_ks, len(dirs), xticklabels, ylabel, 1.4, title, outfilename)
+myplot(scaled_ks, len(dirs), xticklabels, ylabel, 2.4, title, outfilename)

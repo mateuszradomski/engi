@@ -382,57 +382,49 @@ printRunStats()
 }
 
 static bool
-areValidationLayersSupported()
-{
+isValidationLayerSupported(const char *validationLayerName) {
     u32 layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, 0x0);
-
     VkLayerProperties *layers = malloc(layerCount * sizeof(layers[0]));
     vkEnumerateInstanceLayerProperties(&layerCount, layers);
 
-    for(u32 i = 0; i < layerCount; i++)
-    {
-        if(strcmp(layers[i].layerName, "VK_LAYER_KHRONOS_validation") == 0) {
-            return true;
+    bool result = false;
+    for(u32 i = 0; i < layerCount; i++) {
+        if(strcmp(layers[i].layerName, validationLayerName) == 0) {
+            result = true;
+            break;
         }
     }
 
-    return false;
+    free(layers);
+    return result;
 }
 
 static VkInstance
 createInstance()
 {
-    VkApplicationInfo appInfo = { 0 };
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Vulkan Compute";
-    appInfo.applicationVersion = 0;
-    appInfo.pEngineName = "notanengine";
-    appInfo.engineVersion = 0;
-    appInfo.apiVersion = VK_API_VERSION_1_2;
+    VkApplicationInfo appInfo = { 
+        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .pApplicationName = "Vulkan Compute",
+        .applicationVersion = 0,
+        .pEngineName = "notanengine",
+        .engineVersion = 0,
+        .apiVersion = VK_API_VERSION_1_2,
+    };
 
-    VkInstanceCreateInfo createInfo = { 0 };
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.flags = 0;
-    createInfo.pApplicationInfo = &appInfo;
-
-    bool validationLayersSupported = areValidationLayersSupported();
+    VkInstanceCreateInfo createInfo = { 
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pApplicationInfo = &appInfo,
+    };
 
     const char *layerName = "VK_LAYER_KHRONOS_validation";
-    if(validationLayersSupported) {
+    if(isValidationLayerSupported(layerName)) {
         createInfo.enabledLayerCount = 1;
         createInfo.ppEnabledLayerNames = &layerName;
-    } else {
-        createInfo.enabledLayerCount = 0;
-        createInfo.ppEnabledLayerNames = NULL;
-    }
-
-    createInfo.enabledExtensionCount = 0;
-    createInfo.ppEnabledExtensionNames = NULL;
+    } 
 
     VkInstance instance;
     VK_CALL(vkCreateInstance(&createInfo, NULL, &instance));
-
     return instance;
 }
 
@@ -447,11 +439,11 @@ findPhysicalDevice(VkInstance instance)
     }
 
     VkPhysicalDevice *devicesArray = malloc(sizeof(VkPhysicalDevice) * deviceCount);
-    VkResult ss = vkEnumeratePhysicalDevices(instance, &deviceCount, devicesArray);
+    VK_CALL(vkEnumeratePhysicalDevices(instance, &deviceCount, devicesArray));
 
     // TODO(radomski): Choose the most powerfull GPU
     printf("[Vulkan Init]: deviceCount = %u\n", deviceCount);
-    VkPhysicalDevice result = devicesArray[deviceCount - 1];
+    VkPhysicalDevice result = devicesArray[0];
     free(devicesArray);
 
     VkPhysicalDeviceProperties props = { 0 };
@@ -493,44 +485,40 @@ getComputeQueueFamilyIndex(VkPhysicalDevice phyDevice)
 static VKDeviceAndComputeQueue
 createDevice(VkPhysicalDevice phyDevice)
 {
-    VkDeviceQueueCreateInfo queueCreateInfo = { 0 };
-    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    u32 queueFamilyIndex = getComputeQueueFamilyIndex(phyDevice);
-    queueCreateInfo.queueFamilyIndex = queueFamilyIndex;
-    queueCreateInfo.queueCount = 1;
     float queuePriorities = 1.0;
-    queueCreateInfo.pQueuePriorities = &queuePriorities;
-
-    VkDeviceCreateInfo deviceCreateInfo = { 0 };
-    VkPhysicalDeviceFeatures deviceFeatures = { 0 };
-
-    deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.enabledLayerCount = 0;
-    deviceCreateInfo.ppEnabledLayerNames = NULL;
-    deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
-    deviceCreateInfo.queueCreateInfoCount = 1;
-    deviceCreateInfo.pEnabledFeatures = &deviceFeatures;
+    VkDeviceQueueCreateInfo queueCreateInfo = { 
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .pQueuePriorities = &queuePriorities,
+        .queueCount = 1,
+        .queueFamilyIndex = getComputeQueueFamilyIndex(phyDevice),
+    };
 
     const char *atomicExtensionName = "VK_EXT_shader_atomic_float";
-    deviceCreateInfo.enabledExtensionCount = 1;
-    deviceCreateInfo.ppEnabledExtensionNames = &atomicExtensionName;
+    VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicDeviceFeature = { 
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
+        .shaderBufferFloat32AtomicAdd = true,
+    };
 
-    VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicDeviceFeature = { 0 };
-    atomicDeviceFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
-    atomicDeviceFeature.shaderBufferFloat32AtomicAdd = true;
-
-    deviceCreateInfo.pNext = &atomicDeviceFeature;
+    VkDeviceCreateInfo deviceCreateInfo = { 
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &queueCreateInfo,
+        .enabledExtensionCount = 1,
+        .ppEnabledExtensionNames = &atomicExtensionName,
+        .pNext = &atomicDeviceFeature,
+    };
 
     VkDevice device = { 0 };
     VK_CALL(vkCreateDevice(phyDevice, &deviceCreateInfo, NULL, &device));
 
-    VkQueue queue;
-    vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
+    VkQueue queue = { 0 };
+    vkGetDeviceQueue(device, queueCreateInfo.queueFamilyIndex, 0, &queue);
 
-    VKDeviceAndComputeQueue result = { 0 };
-    result.device = device;
-    result.computeQueue = queue;
-    result.computeQueueFamilyIndex = queueFamilyIndex;
+    VKDeviceAndComputeQueue result = {
+        .device = device,
+        .computeQueue = queue,
+        .computeQueueFamilyIndex = queueCreateInfo.queueFamilyIndex,
+    };
     return result;
 }
 
@@ -561,33 +549,37 @@ findMemoryType(VkPhysicalDevice phyDevice, u32 memoryTypeBits, VkMemoryPropertyF
 }
 
 static VKBufferAndMemory
-createBuffer(VKState *state, u32 bufferSize, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryFlags)
+createBuffer(VKState *state, u32 bufferSize,
+             VkBufferUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryFlags)
 {
-    VkBufferCreateInfo bufferCreateInfo = { 0 };
-    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferCreateInfo.size = bufferSize;
-    bufferCreateInfo.usage = usageFlags;
-    bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
+    VkBufferCreateInfo bufferCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = bufferSize,
+        .usage = usageFlags,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
     VkBuffer buffer = { 0 };
     VK_CALL(vkCreateBuffer(state->device, &bufferCreateInfo, NULL, &buffer));
 
     VkMemoryRequirements memoryReqs;
     vkGetBufferMemoryRequirements(state->device, buffer, &memoryReqs);
+    VkMemoryAllocateInfo allocateInfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memoryReqs.size,
+        .memoryTypeIndex = findMemoryType(state->phyDevice,
+                                          memoryReqs.memoryTypeBits,
+                                          memoryFlags), 
+    };
 
     VkDeviceMemory bufferMemory = { 0 };
-    VkMemoryAllocateInfo allocateInfo = { 0 };
-    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocateInfo.allocationSize = memoryReqs.size;
-    allocateInfo.memoryTypeIndex = findMemoryType(state->phyDevice, memoryReqs.memoryTypeBits, memoryFlags);
-
     VK_CALL(vkAllocateMemory(state->device, &allocateInfo, NULL, &bufferMemory)); // allocate memory on device.
     VK_CALL(vkBindBufferMemory(state->device, buffer, bufferMemory, 0));
 
-    VKBufferAndMemory result = { 0 };
-    result.buffer = buffer;
-    result.bufferMemory = bufferMemory;
-    result.bufferSize = bufferSize; // the actual size of this buffer is memoryReqs.size.
+    VKBufferAndMemory result = {
+        .buffer = buffer,
+        .bufferMemory = bufferMemory,
+        .bufferSize = bufferSize, // the actual size of this buffer is memoryReqs.size.
+    };
     return result;
 }
 
@@ -603,46 +595,40 @@ bindDescriptorSetWithBuffers(VKState *state, VkDescriptorSet descriptorSet,
                              VKBufferAndMemory *buffers, u32 *offsets, u32 len)
 {
     u32 bufferInfoSize = len * sizeof(VkDescriptorBufferInfo);
-    VkDescriptorBufferInfo *descriptorBufferInfo = malloc(bufferInfoSize);
-    memset(descriptorBufferInfo, 0, bufferInfoSize);
-
-    for(u32 i = 0; i < len; i++)
-    {
-        descriptorBufferInfo[i].buffer = buffers[i].buffer;
-        descriptorBufferInfo[i].offset = offsets[i];
-        descriptorBufferInfo[i].range = buffers[i].bufferSize - offsets[i];
+    VkDescriptorBufferInfo *bufferInfo = calloc(1, bufferInfoSize);
+    for(u32 i = 0; i < len; i++) {
+        bufferInfo[i].buffer = buffers[i].buffer;
+        bufferInfo[i].offset = offsets[i];
+        bufferInfo[i].range = buffers[i].bufferSize - offsets[i];
     }
 
     u32 writeDescSize = len * sizeof(VkWriteDescriptorSet);
-    VkWriteDescriptorSet *writeDescriptorSets = malloc(writeDescSize);
-    memset(writeDescriptorSets, 0, writeDescSize);
-
-    for(u32 i = 0; i < len; i++)
-    {
-        writeDescriptorSets[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeDescriptorSets[i].dstSet = descriptorSet;
-        writeDescriptorSets[i].dstBinding = i;
-        writeDescriptorSets[i].descriptorCount = 1;
-        writeDescriptorSets[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        writeDescriptorSets[i].pBufferInfo = &descriptorBufferInfo[i];
+    VkWriteDescriptorSet *setWrite = calloc(1, writeDescSize);
+    for(u32 i = 0; i < len; i++) {
+        setWrite[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        setWrite[i].dstSet = descriptorSet;
+        setWrite[i].dstBinding = i;
+        setWrite[i].descriptorCount = 1;
+        setWrite[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        setWrite[i].pBufferInfo = &bufferInfo[i];
     }
 
-    vkUpdateDescriptorSets(state->device, len, writeDescriptorSets, 0, NULL);
+    vkUpdateDescriptorSets(state->device, len, setWrite, 0, NULL);
 
-    free(descriptorBufferInfo);
-    free(writeDescriptorSets);
+    free(bufferInfo);
+    free(setWrite);
 }
 
 static void
 copyStagingBufferToDevice(VKState *state, VKBufferAndMemory staging, VKBufferAndMemory device)
 {
     assert(staging.bufferSize == device.bufferSize);
-    VkCommandBufferAllocateInfo allocInfo = { 0 };
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandPool = state->commandPool;
-    allocInfo.commandBufferCount = 1;
-
+    VkCommandBufferAllocateInfo allocInfo = { 
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandPool = state->commandPool,
+        .commandBufferCount = 1,
+    };
     VkCommandBuffer cmdBuffer = { 0 };
     vkAllocateCommandBuffers(state->device, &allocInfo, &cmdBuffer);
 
@@ -650,12 +636,9 @@ copyStagingBufferToDevice(VKState *state, VKBufferAndMemory staging, VKBufferAnd
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
-
     vkBeginCommandBuffer(cmdBuffer, &beginInfo);
-
     VkBufferCopy copyRegion = { .size = staging.bufferSize };
     vkCmdCopyBuffer(cmdBuffer, staging.buffer, device.buffer, 1, &copyRegion);
-
     vkEndCommandBuffer(cmdBuffer);
 
     VkSubmitInfo submitInfo = {
@@ -674,64 +657,65 @@ static VkDescriptorSetLayout
 createConsecutiveDescriptorSetLayout(VkDevice device, u32 num)
 {
     u32 size = num * sizeof(VkDescriptorSetLayoutBinding);
-    VkDescriptorSetLayoutBinding *descriptorSetLayoutBindingArray = malloc(size);
-    memset(descriptorSetLayoutBindingArray, 0, size);
+    VkDescriptorSetLayoutBinding *layoutBindings = malloc(size);
+    memset(layoutBindings, 0, size);
 
-    for(u32 i = 0; i < num; i++)
-    {
-        descriptorSetLayoutBindingArray[i].binding = i;
-        descriptorSetLayoutBindingArray[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        descriptorSetLayoutBindingArray[i].descriptorCount = 1;
-        descriptorSetLayoutBindingArray[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    for(u32 i = 0; i < num; i++) {
+        layoutBindings[i].binding = i;
+        layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        layoutBindings[i].descriptorCount = 1;
+        layoutBindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     }
 
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = { 0 };
-    descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutCreateInfo.bindingCount = num;
-    descriptorSetLayoutCreateInfo.pBindings = descriptorSetLayoutBindingArray;
+    VkDescriptorSetLayoutCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = num,
+        .pBindings = layoutBindings,
+    };
 
-    VkDescriptorSetLayout descriptorSetLayout;
-    VK_CALL(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, NULL, &descriptorSetLayout));
+    VkDescriptorSetLayout result = { 0 };
+    VK_CALL(vkCreateDescriptorSetLayout(device, &createInfo, NULL, &result));
+    free(layoutBindings);
 
-    free(descriptorSetLayoutBindingArray);
-
-    return descriptorSetLayout;
+    return result;
 }
 
 static VkDescriptorPool
 createDescriptorPool(VkDevice device)
 {
-    VkDescriptorPoolSize descriptorPoolSize = { 0 };
-    descriptorPoolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    descriptorPoolSize.descriptorCount = 3;
+    VkDescriptorPoolSize poolSize = { 
+        .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1,
+    };
 
-    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = { 0 };
-    descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descriptorPoolCreateInfo.maxSets = 1;
-    descriptorPoolCreateInfo.poolSizeCount = 1;
-    descriptorPoolCreateInfo.pPoolSizes = &descriptorPoolSize;
-    descriptorPoolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    VkDescriptorPoolCreateInfo createInfo = { 
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = 1,
+        .poolSizeCount = 1,
+        .pPoolSizes = &poolSize,
+        .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+    };
 
-    VkDescriptorPool descriptorPool;
-    VK_CALL(vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, NULL, &descriptorPool));
+    VkDescriptorPool result;
+    VK_CALL(vkCreateDescriptorPool(device, &createInfo, NULL, &result));
 
-    return descriptorPool;
+    return result;
 }
 
 static VkDescriptorSet
-createDescriptorSet(VkDevice device,
-                    VkDescriptorSetLayout descriptorSetLayout,
+createDescriptorSet(VkDevice device, VkDescriptorSetLayout descriptorSetLayout,
                     VkDescriptorPool descriptorPool)
 {
-    VkDescriptorSet descriptorSet;
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = { 0 };
-    descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    descriptorSetAllocateInfo.descriptorPool = descriptorPool;
-    descriptorSetAllocateInfo.descriptorSetCount = 1;
-    descriptorSetAllocateInfo.pSetLayouts = &descriptorSetLayout;
+    VkDescriptorSetAllocateInfo allocateInfo = { 
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &descriptorSetLayout,
+    };
 
-    VK_CALL(vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, &descriptorSet));
-    return descriptorSet;
+    VkDescriptorSet result;
+    VK_CALL(vkAllocateDescriptorSets(device, &allocateInfo, &result));
+    return result;
 }
 
 static VkQueryPool
@@ -749,82 +733,85 @@ createQueryPool(VkDevice device)
     return queryPool;
 }
 
+static VkCommandPool
+createCommandPool(VkDevice device, u32 computeQueueFamilyIndex)
+{
+    VkCommandPoolCreateInfo commandPoolCreateInfo = { 
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex = computeQueueFamilyIndex,
+    };
+
+    VkCommandPool commandPool = { 0 };
+    VK_CALL(vkCreateCommandPool(device, &commandPoolCreateInfo, NULL, &commandPool));
+    return commandPool;
+}
+
+
 static VKPipelineDefinition
-createComputePipeline(VkDevice device, const char *shaderPath, VkDescriptorSetLayout descriptorSetLayout)
+createComputePipeline(VkDevice device, const char *shaderPath,
+                      VkDescriptorSetLayout descriptorSetLayout)
 {
     Data spirvData = readEntireFile(shaderPath);
-    VkShaderModuleCreateInfo createInfo = { 0 };
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.pCode = (u32 *)spirvData.bytes;
-    createInfo.codeSize = spirvData.length;
-
-    VkShaderModule computeShaderModule;
+    VkShaderModuleCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .pCode = (u32 *)spirvData.bytes, .codeSize = spirvData.length,
+    };
+    VkShaderModule computeShaderModule = { 0 };
     VK_CALL(vkCreateShaderModule(device, &createInfo, NULL, &computeShaderModule));
     free(spirvData.bytes);
 
-    VkPipelineShaderStageCreateInfo shaderStageCreateInfo = { 0 };
-    shaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStageCreateInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-    shaderStageCreateInfo.module = computeShaderModule;
-    shaderStageCreateInfo.pName = "main";
+    VkPipelineShaderStageCreateInfo shaderStageCreateInfo = { 
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .module = computeShaderModule, .pName = "main",
+    };
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = { 
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1, .pSetLayouts = &descriptorSetLayout,
+    };
+    VkPipelineLayout layout = { 0 };
+    VK_CALL(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, NULL, &layout));
 
-    VkPipelineLayout pipelineLayout;
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = { 0 };
-    pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = 1;
-    pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
-    VK_CALL(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, NULL, &pipelineLayout));
-
+    VkComputePipelineCreateInfo pipelineCreateInfo = { 
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .stage = shaderStageCreateInfo, .layout = layout,
+    };
     VkPipeline pipeline;
-    VkComputePipelineCreateInfo pipelineCreateInfo = { 0 };
-    pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-    pipelineCreateInfo.stage = shaderStageCreateInfo;
-    pipelineCreateInfo.layout = pipelineLayout;
+    VK_CALL(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1,
+                                     &pipelineCreateInfo, NULL, &pipeline));
 
-    VK_CALL(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, NULL, &pipeline));
-
-    VKPipelineDefinition result = { 0 };
-    result.pipeline = pipeline;
-    result.pipelineLayout = pipelineLayout;
+    VKPipelineDefinition result = { .pipeline = pipeline, .layout = layout };
     return result;
 }
 
 static VkCommandBuffer
-createCommandBuffer(VKState *state, VKPipelineDefinition *pipelineDefinition, VkDescriptorSet *descriptorSet,
+createCommandBuffer(VKState *state, VKPipelineDefinition *pipeline,
+                    VkDescriptorSet *descriptorSet,
                     u32 dispatchX, u32 dispatchY, u32 dispatchZ)
 {
+    VkCommandBufferAllocateInfo allocateInfo = { 
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = state->commandPool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
     VkCommandBuffer result = { 0 };
+    VK_CALL(vkAllocateCommandBuffers(state->device, &allocateInfo, &result));
 
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = { 0 };
-    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    commandBufferAllocateInfo.commandPool = state->commandPool;
-    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    commandBufferAllocateInfo.commandBufferCount = 1;
-    VK_CALL(vkAllocateCommandBuffers(state->device, &commandBufferAllocateInfo, &result));
-
-    VkCommandBufferBeginInfo beginInfo = { 0 };
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    VkCommandBufferBeginInfo beginInfo = { 
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
     VK_CALL(vkBeginCommandBuffer(result, &beginInfo));
 
-    VkCommandBufferBeginInfo commandBufferInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .pNext = NULL,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        .pInheritanceInfo = NULL,
-    };
-
-    vkCmdBindPipeline(result, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineDefinition->pipeline);
-    vkCmdBindDescriptorSets(result, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineDefinition->pipelineLayout, 0, 1, descriptorSet, 0, NULL);
-
+    vkCmdBindPipeline(result, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+    vkCmdBindDescriptorSets(result, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            pipeline->layout, 0, 1, descriptorSet, 0, NULL);
     vkCmdResetQueryPool(result, state->queryPool, 0, 2);
     vkCmdWriteTimestamp(result, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, state->queryPool, 0);
-
     vkCmdDispatch(result, dispatchX, dispatchY, dispatchZ);
-
     vkCmdWriteTimestamp(result, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, state->queryPool, 1);
 
     VK_CALL(vkEndCommandBuffer(result));
-
     return result;
 }
 
@@ -842,12 +829,7 @@ initalizeVulkan()
     result.computeQueue = deviceAndQueue.computeQueue;
     result.computeQueueFamilyIndex = deviceAndQueue.computeQueueFamilyIndex;
 
-    VkCommandPoolCreateInfo commandPoolCreateInfo = { 0 };
-    commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    commandPoolCreateInfo.flags = 0;
-    commandPoolCreateInfo.queueFamilyIndex = result.computeQueueFamilyIndex;
-    VK_CALL(vkCreateCommandPool(result.device, &commandPoolCreateInfo, NULL, &result.commandPool));
-
+    result.commandPool = createCommandPool(deviceAndQueue.device, deviceAndQueue.computeQueueFamilyIndex);
     result.queryPool = createQueryPool(deviceAndQueue.device);
 
     return result;
@@ -1025,6 +1007,51 @@ ReadMatrixFormatToCOO(const char *filename)
     return result;
 }
 
+static MatrixCOO
+ReadBinaryFormatToCOO(const char *filename)
+{
+    MatrixCOO result = { 0 };
+
+    Data data = readEntireFile(filename);
+    double start = getWallTime();
+
+    MatrixCOO *file = (MatrixCOO *)data.bytes;
+
+    result.M = file->M;
+    result.N = file->N;
+    result.elementNum = file->elementNum;
+
+    result.floatdata = (float *)(data.bytes + (sizeof(u32) * 3));
+    result.row = (u32 *)(data.bytes + (sizeof(u32) * 3) + result.elementNum * sizeof(float));
+    result.col = (u32 *)(data.bytes + (sizeof(u32) * 3) + result.elementNum * sizeof(float) * 2);
+
+    double end = getWallTime();
+    printf("[MatrixCOO Parse]: Parsing took %.2lfs\n", end - start);
+
+    return result;
+}
+
+static void
+SaveCOOToBinaryFormat(const char *filename, MatrixCOO coo)
+{
+    char *basename = strstr(filename, "/") + 1;
+    int basename_without_extension_count = strstr(filename, ".") - basename;
+
+    char output_filename[MAX_PATH] = { 0 };
+    sprintf(output_filename, "data/%.*s.bin", basename_without_extension_count, basename);
+
+    HANDLE fileHandle = CreateFileA(output_filename, GENERIC_READ | GENERIC_WRITE, 0x0, 0x0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0x0);
+    WriteFile(fileHandle, &coo.M, sizeof(u32), 0x0, 0x0);
+    WriteFile(fileHandle, &coo.N, sizeof(u32), 0x0, 0x0);
+    WriteFile(fileHandle, &coo.elementNum, sizeof(u32), 0x0, 0x0);
+
+    WriteFile(fileHandle, coo.floatdata, sizeof(float) * coo.elementNum, 0x0, 0x0);
+    WriteFile(fileHandle, coo.row, sizeof(u32) * coo.elementNum, 0x0, 0x0);
+    WriteFile(fileHandle, coo.col, sizeof(u32) * coo.elementNum, 0x0, 0x0);
+
+    CloseHandle(fileHandle);
+}
+
 static u32
 getMemorySizeMatrixCOO(MatrixCOO mat)
 {
@@ -1035,9 +1062,7 @@ getMemorySizeMatrixCOO(MatrixCOO mat)
 static void
 destroyMatrixCOO(MatrixCOO mat)
 {
-    free(mat.floatdata);
-    free(mat.row);
-    free(mat.col);
+    free(mat.floatdata - 3);
 }
 
 static MatrixELL
@@ -1626,7 +1651,7 @@ MatrixELLMulVec(MatrixELL mat, Vector vec)
 static void
 runTestsForMatrixCPUMul()
 {
-    MatrixCOO matCOO = ReadMatrixFormatToCOO("data/bcsstk30.mtx");
+    MatrixCOO matCOO = ReadBinaryFormatToCOO("data/bcsstk30.bin");
     MatrixELL matELL = COOToMatrixELL(matCOO);
     Vector vec = getSetVector(1.0, matELL.N);
 
@@ -1647,11 +1672,11 @@ runTestsForMatrixCPUMul()
 }
 
 static void
-InVecToSSBO(VKState *state, Vector vec, VKBufferAndMemory ssbo)
+inVecToSSBO(VKState *state, Vector vec, VKBufferAndMemory ssbo)
 {
-    void *mappedMemory = NULL;
-    vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mappedMemory);
-    memcpy(mappedMemory, vec.floatdata, vec.len * sizeof(vec.floatdata[0]));
+    void *mem = NULL;
+    vkMapMemory(state->device, ssbo.bufferMemory, 0, ssbo.bufferSize, 0, &mem);
+    memcpy(mem, vec.floatdata, vec.len * sizeof(vec.floatdata[0]));
     vkUnmapMemory(state->device, ssbo.bufferMemory);
 }
 
@@ -1751,7 +1776,7 @@ createScenarioCOO(VKState *state, MatrixCOO *matrix, Vector vec)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, vec, result.inVecHost);
+    inVecToSSBO(state, vec, result.inVecHost);
 
     {
         VKBufferAndMemory ssbo = result.outVecHost;
@@ -1827,7 +1852,7 @@ destroyScenarioCOO(VKState *state, ScenarioCOO *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
-    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.layout, NULL);
 
     destroyBuffer(state, &scn->outVecDevice);
     destroyBuffer(state, &scn->inVecDevice);
@@ -1893,7 +1918,7 @@ createScenarioELL(VKState *state, MatrixELL *matrix, Vector vec)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, vec, result.inVecHost);
+    inVecToSSBO(state, vec, result.inVecHost);
 
     copyStagingBufferToDevice(state, result.matHost, result.matDevice);
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
@@ -1942,7 +1967,7 @@ destroyScenarioELL(VKState *state, ScenarioELL *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
-    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.layout, NULL);
 
     destroyBuffer(state, &scn->outVecDevice);
     destroyBuffer(state, &scn->inVecDevice);
@@ -2005,7 +2030,7 @@ createScenarioELLBufferOffset(VKState *state, MatrixELL *matrix, Vector vec)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, vec, result.inVecHost);
+    inVecToSSBO(state, vec, result.inVecHost);
 
     copyStagingBufferToDevice(state, result.matHost, result.matDevice);
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
@@ -2055,7 +2080,7 @@ destroyScenarioELLBufferOffset(VKState *state, ScenarioELLBufferOffset *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
-    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.layout, NULL);
 
     destroyBuffer(state, &scn->outVecDevice);
     destroyBuffer(state, &scn->inVecDevice);
@@ -2130,7 +2155,7 @@ createScenarioELL2Buffer(VKState *state, MatrixELL *matrix, Vector vec)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, vec, result.inVecHost);
+    inVecToSSBO(state, vec, result.inVecHost);
 
     copyStagingBufferToDevice(state, result.matHost, result.matDevice);
     copyStagingBufferToDevice(state, result.matFloatHost, result.matFloatDevice);
@@ -2180,7 +2205,7 @@ destroyScenarioELL2Buffer(VKState *state, ScenarioELL2Buffer *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
-    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.layout, NULL);
 
     destroyBuffer(state, &scn->outVecDevice);
     destroyBuffer(state, &scn->inVecDevice);
@@ -2271,7 +2296,7 @@ createScenarioSELL(VKState *state, MatrixSELL *matrix, Vector vec)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, vec, result.inVecHost);
+    inVecToSSBO(state, vec, result.inVecHost);
 
     copyStagingBufferToDevice(state, result.matHeaderAndColIndexHost, result.matHeaderAndColIndexDevice);
     copyStagingBufferToDevice(state, result.matRowOffsetsHost, result.matRowOffsetsDevice);
@@ -2325,7 +2350,7 @@ destroyScenarioSELL(VKState *state, ScenarioSELL *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
-    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.layout, NULL);
 
     destroyBuffer(state, &scn->outVecDevice);
     destroyBuffer(state, &scn->inVecDevice);
@@ -2418,7 +2443,7 @@ createScenarioSELLColumnMajor(VKState *state, MatrixSELLColumnMajor *matrix, Vec
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, vec, result.inVecHost);
+    inVecToSSBO(state, vec, result.inVecHost);
 
     copyStagingBufferToDevice(state, result.matHeaderAndColIndexHost, result.matHeaderAndColIndexDevice);
     copyStagingBufferToDevice(state, result.matRowOffsetsHost, result.matRowOffsetsDevice);
@@ -2472,7 +2497,7 @@ destroyScenarioSELLColumnMajor(VKState *state, ScenarioSELLColumnMajor *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
-    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.layout, NULL);
 
     destroyBuffer(state, &scn->outVecDevice);
     destroyBuffer(state, &scn->inVecDevice);
@@ -2548,7 +2573,7 @@ createScenarioSELLOffsets(VKState *state, MatrixSELL *matrix, Vector vec)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, vec, result.inVecHost);
+    inVecToSSBO(state, vec, result.inVecHost);
 
     copyStagingBufferToDevice(state, result.matHost, result.matDevice);
     copyStagingBufferToDevice(state, result.inVecHost, result.inVecDevice);
@@ -2601,7 +2626,7 @@ destroyScenarioSELLOffsets(VKState *state, ScenarioSELLOffsets *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
-    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.layout, NULL);
 
     destroyBuffer(state, &scn->outVecDevice);
     destroyBuffer(state, &scn->inVecDevice);
@@ -2689,7 +2714,7 @@ createScenarioCSR(VKState *state, MatrixCSR *matrix, Vector vec)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, vec, result.inVecHost);
+    inVecToSSBO(state, vec, result.inVecHost);
 
     {
         VKBufferAndMemory ssbo = result.outVecHost;
@@ -2751,7 +2776,7 @@ destroyScenarioCSR(VKState *state, ScenarioCSR *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
-    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.layout, NULL);
 
     destroyBuffer(state, &scn->outVecDevice);
     destroyBuffer(state, &scn->inVecDevice);
@@ -2843,7 +2868,7 @@ createScenarioCSC(VKState *state, MatrixCSC *matrix, Vector vec)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, vec, result.inVecHost);
+    inVecToSSBO(state, vec, result.inVecHost);
 
     {
         VKBufferAndMemory ssbo = result.outVecHost;
@@ -2910,7 +2935,7 @@ destroyScenarioCSC(VKState *state, ScenarioCSC *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
-    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.layout, NULL);
 
     destroyBuffer(state, &scn->outVecDevice);
     destroyBuffer(state, &scn->inVecDevice);
@@ -3003,7 +3028,7 @@ createScenarioBSR(VKState *state, MatrixBSR *matrix, Vector vec)
         vkUnmapMemory(state->device, ssbo.bufferMemory);
     }
 
-    InVecToSSBO(state, vec, result.inVecHost);
+    inVecToSSBO(state, vec, result.inVecHost);
 
     {
         VKBufferAndMemory ssbo = result.outVecHost;
@@ -3072,7 +3097,7 @@ destroyScenarioBSR(VKState *state, ScenarioBSR *scn)
 {
     vkFreeCommandBuffers(state->device, state->commandPool, 1, &scn->commandBuffer);
     vkDestroyPipeline(state->device, scn->pipelineDefinition.pipeline, NULL);
-    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.pipelineLayout, NULL);
+    vkDestroyPipelineLayout(state->device, scn->pipelineDefinition.layout, NULL);
 
     destroyBuffer(state, &scn->outVecDevice);
     destroyBuffer(state, &scn->inVecDevice);
@@ -3096,13 +3121,11 @@ runTestsForMatrix(VKState *state, char *filename)
 {
     printf("=== [%31s] ===\n", filename);
 
-    MatrixCOO matCOO   = ReadMatrixFormatToCOO(filename);
+    MatrixCOO matCOO   = ReadBinaryFormatToCOO(filename);
     MatrixELL matELL   = COOToMatrixELL(matCOO);
-#if 0
     MatrixSELL matSELL_2 = ELLToMatrixSELL(matELL, 2);
     MatrixSELL matSELL_4 = ELLToMatrixSELL(matELL, 4);
     MatrixSELL matSELL_8 = ELLToMatrixSELL(matELL, 8);
-#endif
 
     MatrixSELLColumnMajor matSELL_CM_2 = ELLToMatrixSELLColumnMajor(matELL, 2);
     MatrixSELLColumnMajor matSELL_CM_4 = ELLToMatrixSELLColumnMajor(matELL, 4);
@@ -3134,7 +3157,6 @@ runTestsForMatrix(VKState *state, char *filename)
     runScenarioELL(state, &scnELL, &matELL, expVec, filename);
     destroyScenarioELL(state, &scnELL);
 
-#if 0
     ScenarioSELL scnSELL_2 = createScenarioSELL(state, &matSELL_2, vec);
     runScenarioSELL(state, &scnSELL_2, &matSELL_2, expVec, filename);
     destroyScenarioSELL(state, &scnSELL_2);
@@ -3146,7 +3168,6 @@ runTestsForMatrix(VKState *state, char *filename)
     ScenarioSELL scnSELL_8 = createScenarioSELL(state, &matSELL_8, vec);
     runScenarioSELL(state, &scnSELL_8, &matSELL_8, expVec, filename);
     destroyScenarioSELL(state, &scnSELL_8);
-#endif
 
     ScenarioSELLColumnMajor scnSELL_CM_2 = createScenarioSELLColumnMajor(state, &matSELL_CM_2, vec);
     runScenarioSELLColumnMajor(state, &scnSELL_CM_2, &matSELL_CM_2, expVec, filename);
@@ -3182,11 +3203,9 @@ runTestsForMatrix(VKState *state, char *filename)
 
     destroyMatrixCOO(matCOO);
     destroyMatrixELL(matELL);
-#if 0
     destroyMatrixSELL(matSELL_2);
     destroyMatrixSELL(matSELL_4);
     destroyMatrixSELL(matSELL_8);
-#endif
     destroyMatrixSELLColumnMajor(matSELL_CM_2);
     destroyMatrixSELLColumnMajor(matSELL_CM_4);
     destroyMatrixSELLColumnMajor(matSELL_CM_8);
@@ -3197,6 +3216,27 @@ runTestsForMatrix(VKState *state, char *filename)
     destroyMatrixBSR(matBSR_2);
     destroyMatrixBSR(matBSR_4);
     destroyMatrixBSR(matBSR_8);
+}
+
+int main2()
+{
+    char *matricies[] = {
+        "data/beaflw.mtx",
+        "data/bcsstk32.mtx",
+        "data/dense2.mtx",
+        "data/scircuit.mtx",
+        "data/Ga41As41H72.mtx"
+    };
+
+    for(u32 i = 0; i < ARRAY_LEN(matricies); i++)
+    {
+        const char *filename = matricies[i];
+        MatrixCOO matCOO = ReadMatrixFormatToCOO(filename);
+        SaveCOOToBinaryFormat(filename, matCOO);
+        destroyMatrixCOO(matCOO);
+    }
+
+    return 0;
 }
 
 int main()
@@ -3213,20 +3253,13 @@ int main()
 #endif
 
 #if 1
-#if 1
     char *matricies[] = {
-        "data/beaflw.mtx",
-        "data/bcsstk32.mtx",
-        "data/dense2.mtx",
-        "data/scircuit.mtx",
-        "data/Ga41As41H72.mtx"
+        "data/beaflw.bin",
+        "data/bcsstk32.bin",
+        "data/dense2.bin",
+        "data/scircuit.bin",
+        "data/Ga41As41H72.bin"
     };
-#else
-    char *matricies[] = {
-         "data/beaflw.mtx",
-         "data/scircuit.mtx" 
-         };
-#endif
 
     for(u32 i = 0; i < ARRAY_LEN(matricies); i++)
     {

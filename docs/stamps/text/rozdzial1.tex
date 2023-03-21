@@ -1,0 +1,45 @@
+\chapter{Wprowadzenie}
+\label{cha:wprowadzenie}
+
+Procesory graficzne z wielu punktów widzenia są kompletnie różne od zwykłej jednostki centralnej w każdym komputerze.
+Mają nienaturalną konstrukcję, skupiającą się na posiadaniu jak największej ilości jednostek arytmetycznych w krzemie.
+Wynikiem tego jest nieosiągalnie duża dla zwykłych mikroprocesorów, surowa moc obliczeniowa.
+Niecodzienność struktury tej rodziny procesorów czyni tworzenie programów rozwiązujących dany problem bardziej skompilowane.
+Ilość dostępnych języków programowania dla procesorów graficznych jest znikoma w porównaniu do języków pozwalających na programowanie przykładowo jednostki centralnej z architekturą x86.
+Procesory graficzne mogą wspierać różne ISA w tej samej chwili, umożliwia to ciągle działający sterownik, który tłumaczy daną abstrakcję na odpowiedni dla tej mikro-architektury kod maszynowy.
+Tak jak w nowoczesnych jednostkach centralnych, finalnie wykonywany kod maszynowy nazywany mikrokodem, często zmienia się pomiędzy architekturami; dla przykładu firma AMD udostępnia specyfikację mikrokodu publicznie\cite{AMDISA}, natomiast firma NVIDIA nie udostępnia takich danych. 
+Przykładową abstrakcją wyższą jest język pośredni SPIR-V stworzony na potrzeby obliczeń wielowątkowych i graficznych.
+Załadowanie i uruchomienie tego kodu umożliwia specyfikacja Vulkan, opisująca zestaw interfejsów pozwalających na kontrolowanie zachowania procesora graficznego.
+
+%---------------------------------------------------------------------------
+
+\section{Cele pracy}
+\label{sec:celePracy}
+
+Celem poniższej pracy jest implementacja algorytmów mnożenia macierzy rzadkich przez wektor oraz przedstawienie użytego interfejsu do procesora graficznego. Praca również omawia ogólną mikro-architekturę procesorów graficznych i uruchamianie shaderów obliczeniowych na nich.
+
+%---------------------------------------------------------------------------
+
+\section{Zawartość pracy}
+\label{sec:zawartoscPracy}
+
+W rozdziale \ref{cha:macierzwektor} omówiono problem macierzy rzadkich i formatów do ich przetrzymywania.
+Następnie w rozdziale \ref{cha:vulkan_micro_shaders} przedstawiono ogólną mikro-architekturę nowoczesnych procesorów graficznych.
+Opisano użyty interfejs Vulkan do zarządzania procesorem graficznym, czym są shadery obliczeniowe.
+Sposób implementacji komunikacji z procesorem graficznych oraz poszczególnych shaderów obliczeniowych zawarto w rozdziale \ref{cha:implementacja}.
+Uzyskane wyniki używając tej implementacji przeanalizowano w rozdziale \ref{cha:wyniki}, a podsumowanie pracy przedstawiono w rozdziale \ref{cha:podsumowanie}.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

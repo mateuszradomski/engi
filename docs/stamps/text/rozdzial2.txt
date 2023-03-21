@@ -1,0 +1,37 @@
+
+
+MNOŻENIE MACIERZ-WEKTOR DLA MACIERZY RZADKICH
+
+
+Problem mnożenia macierzy przez wektor
+
+Operacja taka jest specjalnym przypadkiem mnożenia macierzy przez macierz, gdy liczba kolumn w drugiej macierzy równa jest jeden. Macierz o liczbie rzędów M i liczbie kolumn N zostaje pomnożona przez wektor o liczbie rzędów równej ilości kolumn macierzy. Dla macierzy A o wymiarach M × N i wektora X o wymiarach N × 1 możemy następująco przedstawić operację mnożenia Y = AX. Wynikowy wektor Y będzie posiadał liczbę rzędów równą liczbie rzędów macierzy wejściowej, wymiary wektora to finalnie M × 1.
+
+
+Macierze rzadkie
+
+Macierz rzadka jest specjalnym przypadkiem macierzy, w której większość jej elementów jest równa zero. Możemy zaobserwować, że dla elementów zerowych mnożenie zawsze będzie skutkować wynikiem równym zero. Poświęcanie czasu obliczeniowego do ewaluacji iloczynu tych elementów jest zbędne. Ilość pamięci jaka wymagana jest do przetrzymania macierzy rośnie kwadratowo wraz ze wzrostem jej wymiaru. Jeżeli przyjmiemy, że tylko n_(z) elementów w macierzy jest niezerowych, teoretycznie możliwe jest następujące zmniejszenie zużycia pamięci i przyśpieszenie obliczeń:
+
+
+Problem mnożenia macierzy rzadkiej przez wektor
+
+Istnieje pole problemów, których rozwiązanie zawsze wymaga pracy z macierzami rzadkimi. Przykładem jest metoda elementów skończonych (MES), w której ostateczne określenie wartości w węzłach jest rozwiązaniem układu równań, w którym macierz jest rzadka. Obliczenia na większych macierzach zazwyczaj dokonywane są przez metody iteracyjne. Podstawową operacją w tych metodach jest mnożenie macierzy rzadkiej przez wektor wiele razy, aby otrzymać jak najlepsze przybliżenie.
+
+
+Formaty macierzy rzadkich
+
+Główny problem w przechowywaniu macierzy rzadkich to sposób w jaki określony zostaje rząd oraz kolumna dla danego elementu. Samo przechowywanie tylko elementów niezerowych jest elementem wspólnym prawie wszystkich formatów. Występują jednak formaty, które przetrzymują część elementów zerowych, aby uprościć oszacowanie rzędu i kolumny. Zmniejsza to narzut pamięciowy przetrzymywania danych dodatkowych przy tablicy elementów niezerowych.
+
+Formaty omówione to:
+
+-   COO (ang. Coordinate Format) - najprostszy format, który wykorzystuje trzy tablice _row_, _col_, _floatdata_. Odpowiednio przechowują one rząd, kolumnę i wartość elementu _i_’tego. Długość tablic równa jest ilości elementów niezerowych.
+
+-   CSR (ang. Compressed Sparse Row Format) - format rzędowo kompresuje macierz przez zapisywanie wszystkich wartości z danego rzędu bezpośrednio po sobie. Takie podejście umożliwia nieprzechowywanie rzędu elementu wprost, a jedynie indeks początkowego elementu wiersza. Dwie tablice _floatdata_ i _columnIndices_ są nadal długości równej ilości elementów niezerowych i przechowują one odpowiednio wartość i kolumnę elementu _i_’tego. Trzecia tablica _rowOffsets_ ma długość o jeden większą niż ilość rzędów macierzy, co dla macierzy o większych zagęszczeniach pozwala zaoszczędzić na pamięci w porównaniu do formatu COO. Dla numeru rzędu r będący wartością z przedziału [0, N − 1] format przechowuje indeks pierwszego elementu w tablicach _floatdata_ i _columnIndices_, należącego do tego rzędu. Liczbę elementów niezerowych w danym wierszu można obliczyć jako różnicę pomiędzy indeksem w wierszu r + 1, a indeksem w wierszu r.
+
+-   CSC (ang. Compressed Sparse Column Format) - format kolumnowo kompresuje macierz w identyczny sposób jak format CSR ze zmianą kierunku kompresji. Niezmiennie macierz w tablicy _floatdata_ przechowuje wartość elementu _i_’tego. Format ten zapisuje w pełni rząd elementu _i’tego_ w tablicy _rowIndex_ o długości równej ilości elementów niezerowych. Nieprzechowywane natomiast są kolumny zastąpione przez indeks początkowego elementu kolumny. Zadanie to pełni tablica _columnOffsets_ o długości o jeden większa niż ilość kolumn w macierzy. Jeżeli liczba rzędów jest równa liczbie kolumn macierzy, format ten będzie wymagał tej samej ilości pamięci, co format CSR. Dla problemu mnożenia macierz-wektor najczęściej preferowanym formatem jest CSR ze względu na swoją prostotę i wyższą wydajność osiąganą dzięki braku wymagania wykorzystania operacji atomicznych.
+
+-   ELL (ang. ELLPACK Format) - format przechowuje podmacierz o wymiarach M × P gdzie P jest maksymalną ilością elementów niezerowych ze wszystkich wierszy. Jest to pierwszy format, który wybiera przechowywać większą ilość danych niż ilość elementów niezerowych. Jego wydajność wzrasta dla macierzy, w których średnia ilość elementów niezerowych w wierszu jest najbardziej zbliżona do P. Wykorzystuje dwie tablice, _floatdata_ i _columnIndices_ obie o wymiarach M × K. Przechowują one kolejno wartości elementów i indeks kolumny, w której znajduje się ten element. Lokalizacja wartości należących do danego rzędu jest prosta, ze względu na stałą P. Zaczynając od indeksu rP następne P elementów należy do wiersza o indeksie r. Jeżeli wiersz posiada mniej elementów niezerowych niż P, pola niewypełnione wartością lub kolumną są ustawione na specjalną wartość traktowaną jako flaga.
+
+-   SELL (ang. Sliced ELLPACK Format) - jest modyfikacją formatu ELL, w której wartość P jest obliczana w obrębie paska wierszy o wysokości C. Umożliwia to ograniczenie efektu, w którym wiersz z dużą ilością elementów sztucznie zwiększa ilość potrzebnej pamięci. Takie sporadyczne wiersze będą jedynie wpływać na rozmiar swojego paska. Najczęściej jednak wartość P pasków będzie zbliżona do wartości średniej ilości elementów niezerowych we wszystkich wierszach. Format wymaga dodatkowej tablicy _rowOffsets_ o długości równej ilości pasków, ta może zostać obliczona jako $\frac{M}{C}$ zaokrąglajac w górę. Tak samo jak w formacie CSR przetrzymuje ona indeks pierwszego elementu w dwóch następnych tablicach odpowiadający _i_’temu paskowi. Tablice te to _floatdata_ i _columnIndices_, pełniące tę samą role, co tablice o tej samej nazwie w formacie ELL. Poprzez sterowanie wartością C zmieniamy zachowanie formatu. W przypadku, gdy C = M mamy tylko jeden pasek, zatem format upraszcza się do ELL. Natomiast dla C = 1, format zachowuje się identycznie jak CSR.
+
+-   BSR (ang. Block Compressed Sparse Row Format) - format dzielący i przechowujący macierz jako zbiór bloków o wymiarach B_(s) × B_(s). W specjalnym przypadku, gdy B_(s) = 1 format zachowuje się identycznie jak CSR. Dla wartości większych macierz zostaje skompresowana rzędowo przy założeniu, że najmniejszą komórką jest blok B_(s) × B_(s). W tablicy _floatdata_ przechowywane są dane bloków następująco po sobie, długość tej tablicy równa jest liczbie niezerowych bloków pomnożona przez B_(s)². Kolumnę bloku określa tablica _columnIndices_ o długości równej liczbie niezerowych bloków. Określenie kolumny w przestrzeni macierzy dla elementu w bloku odbywa się przez pomnożenie kolumny bloku przez B_(s) oraz dodanie kolumny elementu wewnątrz bloku. Pierwszy blok należący do rzędu bloku o indeksie r_(b) znajduje się pod indeksem wskazanym przez wartość w tablicy _rowOffsets_, pod indeksem r_(b). Tablica ta ma długość równą $\frac{M}{B_s} + 1$. Obliczenie rzędu w przestrzeni macierzy dla elementu odbywa się podobnie jak dla kolumny, do iloczynu r_(b) i B_(s) zostaje dodany rząd elementu wewnątrz bloku. Dla macierzy o wymiarach nie będących wielokrotnością B_(s) wartości elementów wykraczające poza wymiar macierzy A zostają ustawione na wartość zerową.

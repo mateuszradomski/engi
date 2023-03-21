@@ -1,0 +1,14 @@
+\chapter{Podsumowanie}
+\label{cha:podsumowanie}
+
+Praca obrała za cel stworzenie programu komunikującego się z procesorem graficznym przy pomocy interfejsu Vulkan.
+Przy jego pomocy zaprzęgnięto procesor graficzny do wykonywania arbitralnych obliczeń, które wykorzystano do obliczenia wyników mnożenia macierzy rzadkiej z wektorem.
+Operację wykonano przy pomocy wielu różnych formatów przechowywania macierzy rzadkich na przykładowych macierzach rzadkich o szerokim spektrum cech charakterystycznych.
+Na podstawie uzyskanych wyników stwierdzono, że format CSR najczęściej będzie optymalnym lub najbliżej optymalnym formatem przechowania macierzy rzadkiej, nie tylko w kontekście czystej wydajności obliczeniowej, lecz również z perspektywy efektywności zużycia pamięci.
+Nietrywialna wydajność obliczeń wskazuje, iż interfejs Vulkan posiada bardzo swobodny dostęp do wykorzystania wszystkich zasobów procesora graficznego celem dokonania arbitralnych obliczeń.
+
+Tak jak w każdej dziedzinie inżynieryjnej najlepsza decyzja to ta podjęta w odpowiednim kontekście, dla najlepszych wyników należałoby więc dokonać ewaluacji jak największej ilości formatów w przestrzeni rozwiązywanego problemu.
+Należy zwrócić uwagę, iż istnieją sytuacje, w których prędkość obliczeń nie gra roli, ponieważ liczy się możliwie największa kompresja macierzy rzadkiej w pamięci.
+Dla takich zastosowań nawet mało wydajny format BSR będzie w stanie dostarczyć najmniejszego zużycia pamięci dla niektórych macierzy rzadkich.
+
+Temat nie został w pełni zgłębiony, perspektywą rozwoju może być przeniesienie części obliczeń w grach trójwymiarowych, wykorzystujących silną symulację fizyczną na procesor graficzny, celem jej przyśpieszenia lub wykorzystanie procesora graficznego w urządzeniu mobilnym, aby umożliwić mu lepsze reprezentowanie rozszerzonej rzeczywistości poprzez zwiększoną wydajność przetwarzania obrazów.

@@ -127,7 +127,7 @@ typedef struct VKBufferAndMemory
 typedef struct VKPipelineDefinition
 {
     VkPipeline pipeline;
-    VkPipelineLayout pipelineLayout;
+    VkPipelineLayout layout;
 } VKPipelineDefinition;
 
 typedef struct VKState

@@ -1,0 +1,3 @@
+    Objects: 1
+        [0] 0x201c3a41ca0, type: 6, name: NULL
+UNASSIGNED-CoreValidation-DrawState-CommandBufferSingleSubmitViolation(ERROR / SPEC): msgNum: -329268476 - Validation Error: [ UNASSIGNED-CoreValidation-DrawState-CommandBufferSingleSubmitViolation ] Object 0: handle = 0x201c3a41ca0, type = VK_OBJECT_TYPE_COMMAND_BUFFER; | MessageID = 0xec5fc304 | VkCommandBuffer 0x201c3a41ca0[] was begun w/ VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT set, but has been submitted 0xe9times.
